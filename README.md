@@ -3,7 +3,7 @@ Custom fantasy football dashboard; import your team, get insights, news, and mor
 
 ## Status
 
-v1 scope: import a team from ESPN (public or private league) and display its roster. No persistence, no insights yet — see [the plan](.) for details.
+v1 scope: import a team from ESPN (public or private league) and display its roster. No persistence, no insights yet
 
 ## Structure
 
