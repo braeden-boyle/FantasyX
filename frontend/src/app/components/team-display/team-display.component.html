@@ -1,0 +1,68 @@
+@if (team(); as t) {
+  <div class="max-w-4xl mx-auto mt-10 p-4 flex flex-col gap-6">
+    <div class="flex items-center justify-between">
+      <h1 class="text-2xl font-semibold">{{ t.name }} <span class="text-surface-500">({{ t.abbrev }})</span></h1>
+      <span class="text-sm text-surface-500">{{ t.wins }}-{{ t.losses }}-{{ t.ties }}</span>
+    </div>
+
+    <div>
+      <h2 class="text-lg font-medium mb-2">Starters</h2>
+      <p-table [value]="starters()" styleClass="p-datatable-sm">
+        <ng-template pTemplate="header">
+          <tr>
+            <th>Slot</th>
+            <th>Player</th>
+            <th>Pos</th>
+            <th>Team</th>
+            <th>Status</th>
+          </tr>
+        </ng-template>
+        <ng-template pTemplate="body" let-player>
+          <tr>
+            <td>{{ player.slot }}</td>
+            <td>{{ player.fullName }}</td>
+            <td>{{ player.position }}</td>
+            <td>{{ player.proTeam }}</td>
+            <td>
+              @if (player.injuryStatus) {
+                <p-tag severity="warn" [value]="player.injuryStatus" />
+              }
+            </td>
+          </tr>
+        </ng-template>
+      </p-table>
+    </div>
+
+    <div>
+      <h2 class="text-lg font-medium mb-2">Bench</h2>
+      <p-table [value]="bench()" styleClass="p-datatable-sm">
+        <ng-template pTemplate="header">
+          <tr>
+            <th>Player</th>
+            <th>Pos</th>
+            <th>Team</th>
+            <th>Status</th>
+          </tr>
+        </ng-template>
+        <ng-template pTemplate="body" let-player>
+          <tr>
+            <td>{{ player.fullName }}</td>
+            <td>{{ player.position }}</td>
+            <td>{{ player.proTeam }}</td>
+            <td>
+              @if (player.injuryStatus) {
+                <p-tag severity="warn" [value]="player.injuryStatus" />
+              }
+            </td>
+          </tr>
+        </ng-template>
+      </p-table>
+    </div>
+
+    <a routerLink="/import" class="text-primary-600 underline text-sm">Import a different team</a>
+  </div>
+} @else {
+  <div class="max-w-xl mx-auto mt-10 p-4 text-center text-surface-500">
+    No team imported yet. <a routerLink="/import" class="text-primary-600 underline">Go import one</a>.
+  </div>
+}

@@ -1,0 +1,75 @@
+<div class="max-w-xl mx-auto mt-10 p-4">
+  <p-panel header="Import your ESPN fantasy team">
+    <form [formGroup]="form" class="flex flex-col gap-4">
+      <div class="flex gap-4">
+        <div class="flex-1 min-w-0">
+          <label class="block mb-1 text-sm font-medium" for="leagueId">League ID</label>
+          <p-inputNumber
+            inputId="leagueId"
+            formControlName="leagueId"
+            [useGrouping]="false"
+            styleClass="w-full"
+            inputStyleClass="w-full"
+          />
+        </div>
+        <div class="w-32">
+          <label class="block mb-1 text-sm font-medium" for="season">Season</label>
+          <p-inputNumber
+            inputId="season"
+            formControlName="season"
+            [useGrouping]="false"
+            styleClass="w-full"
+            inputStyleClass="w-full"
+          />
+        </div>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <p-toggleswitch formControlName="isPrivate" inputId="isPrivate" />
+        <label for="isPrivate" class="text-sm">This is a private league</label>
+      </div>
+
+      @if (form.value.isPrivate) {
+        <div class="flex flex-col gap-3 p-3 border border-surface-200 rounded-md">
+          <p class="text-sm text-surface-500">
+            Log into ESPN in your browser, open devtools &rarr; Application/Storage &rarr; Cookies for
+            fantasy.espn.com, and copy the <code>espn_s2</code> and <code>SWID</code> values here. These are
+            sent directly to our backend on each request and are never stored.
+          </p>
+          <input pInputText formControlName="espnS2" placeholder="espn_s2" class="w-full" />
+          <input pInputText formControlName="swid" placeholder="SWID (including curly braces)" class="w-full" />
+        </div>
+      }
+
+      <p-button
+        label="Find Teams"
+        type="button"
+        [outlined]="true"
+        [loading]="loadingTeams()"
+        [disabled]="!form.value.leagueId || !form.value.season"
+        (onClick)="findTeams()"
+      />
+
+      @if (teams().length) {
+        <div>
+          <label class="block mb-1 text-sm font-medium" for="teamId">Your team</label>
+          <p-select
+            inputId="teamId"
+            formControlName="teamId"
+            [options]="teams()"
+            optionLabel="name"
+            optionValue="teamId"
+            placeholder="Select your team"
+            styleClass="w-full"
+          />
+        </div>
+      }
+
+      @if (errorMessage()) {
+        <p-message severity="error" [text]="errorMessage()!" />
+      }
+
+      <p-button label="Import Team" type="button" [loading]="importing()" [disabled]="form.invalid" (onClick)="importTeam()" />
+    </form>
+  </p-panel>
+</div>
