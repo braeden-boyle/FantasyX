@@ -71,7 +71,7 @@ export class ImportTeamComponent {
           this.loadingTeams.set(false);
         },
         error: (err) => {
-          this.errorMessage.set(err?.error?.message ?? 'Could not find teams for that league.');
+          this.errorMessage.set(err?.error?.title ?? 'Could not find teams for that league.');
           this.loadingTeams.set(false);
         },
       });
@@ -101,7 +101,7 @@ export class ImportTeamComponent {
         },
         error: (err) => {
           this.importing.set(false);
-          this.errorMessage.set(err?.error?.message ?? 'Could not import that team.');
+          this.errorMessage.set(err?.error?.title ?? 'Could not import that team.');
         },
       });
   }
