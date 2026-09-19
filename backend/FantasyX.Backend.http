@@ -1,0 +1,22 @@
+@FantasyX.Backend_HostAddress = http://localhost:8080
+
+### List teams in a public league
+POST {{FantasyX.Backend_HostAddress}}/api/espn/leagues/teams
+Content-Type: application/json
+
+{
+  "leagueId": 123456,
+  "season": 2024
+}
+
+### Import a specific team's roster
+POST {{FantasyX.Backend_HostAddress}}/api/espn/team
+Content-Type: application/json
+
+{
+  "leagueId": 123456,
+  "season": 2024,
+  "teamId": 1
+}
+
+###
