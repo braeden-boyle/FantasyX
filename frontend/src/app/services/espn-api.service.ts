@@ -1,0 +1,20 @@
+import { Injectable } from '@angular/core';
+import { HttpClient } from '@angular/common/http';
+import { Observable } from 'rxjs';
+import { environment } from '../../environments/environment';
+import { ImportTeamRequest, LeagueTeamsRequest, Team, TeamSummary } from '../models/team.model';
+
+@Injectable({ providedIn: 'root' })
+export class EspnApiService {
+  private readonly baseUrl = `${environment.apiBaseUrl}/api/espn`;
+
+  constructor(private readonly http: HttpClient) {}
+
+  listTeams(request: LeagueTeamsRequest): Observable<TeamSummary[]> {
+    return this.http.post<TeamSummary[]>(`${this.baseUrl}/leagues/teams`, request);
+  }
+
+  getTeam(request: ImportTeamRequest): Observable<Team> {
+    return this.http.post<Team>(`${this.baseUrl}/team`, request);
+  }
+}
