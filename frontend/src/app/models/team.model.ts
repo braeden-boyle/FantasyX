@@ -35,3 +35,19 @@ export interface LeagueTeamsRequest {
 export interface ImportTeamRequest extends LeagueTeamsRequest {
   teamId: number;
 }
+
+export interface SavedCredentials {
+  espnS2: string;
+  swid: string;
+  lastLeagueId: number | null;
+  lastSeason: number | null;
+  lastTeamId: number | null;
+}
+
+export interface SaveCredentialsRequest {
+  espnS2: string;
+  swid: string;
+  lastLeagueId?: number;
+  lastSeason?: number;
+  lastTeamId?: number;
+}

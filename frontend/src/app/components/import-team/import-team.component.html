@@ -33,11 +33,27 @@
         <div class="flex flex-col gap-3 p-3 border border-surface-200 rounded-md">
           <p class="text-sm text-surface-500">
             Log into ESPN in your browser, open devtools &rarr; Application/Storage &rarr; Cookies for
-            fantasy.espn.com, and copy the <code>espn_s2</code> and <code>SWID</code> values here. These are
-            sent directly to our backend on each request and are never stored.
+            fantasy.espn.com, and copy the <code>espn_s2</code> and <code>SWID</code> values here.
           </p>
           <input pInputText formControlName="espnS2" placeholder="espn_s2" class="w-full" />
           <input pInputText formControlName="swid" placeholder="SWID (including curly braces)" class="w-full" />
+
+          <div class="flex items-center gap-2">
+            <p-checkbox formControlName="rememberOnDevice" inputId="rememberOnDevice" [binary]="true" />
+            <label for="rememberOnDevice" class="text-sm">
+              Remember these details on this device (encrypted, no account needed)
+            </label>
+          </div>
+
+          @if (hasSavedDetails()) {
+            <button
+              type="button"
+              class="text-sm text-left text-primary-600 underline w-fit"
+              (click)="forgetSavedDetails()"
+            >
+              Forget saved details
+            </button>
+          }
         </div>
       }
 
