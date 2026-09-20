@@ -1,2 +1,6 @@
-# Claude Code local dev tooling (machine-specific paths)
+# Claude Code local dev tooling (machine-specific paths, local settings, skill cache)
 .claude/launch.json
+.claude/settings.local.json
+.mcp.json
+.agents/
+skills-lock.json
