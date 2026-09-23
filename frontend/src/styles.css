@@ -1,3 +1,5 @@
+@import 'primeicons/primeicons.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -10,4 +12,10 @@ body {
 body {
   margin: 0;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* PrimeNG's avatar image has no object-fit of its own, so it stretches non-square
+   images (e.g. player headshots) to fill the circle instead of cropping them. */
+.p-avatar-image img {
+  object-fit: cover;
 }

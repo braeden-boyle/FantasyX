@@ -7,15 +7,25 @@ export interface Player {
   starter: boolean;
   injuryStatus: string | null;
   headshotUrl: string;
+  isTeamLogo: boolean;
+  projectedPoints: number;
+  points: number;
+  opponent: string | null;
+  opponentIsHome: boolean | null;
+  gameTimeUtc: string | null;
+  opponentPositionRank: number | null;
 }
 
 export interface Team {
   teamId: number;
   name: string;
   abbrev: string;
+  leagueName: string;
   wins: number;
   losses: number;
   ties: number;
+  standingRank: number;
+  leagueSize: number;
   players: Player[];
 }
 

@@ -1,8 +1,32 @@
 @if (team(); as t) {
   <div class="max-w-4xl mx-auto mt-10 p-4 flex flex-col gap-6">
-    <div class="flex items-center justify-between">
-      <h1 class="text-2xl font-semibold">{{ t.name }} <span class="text-surface-500">({{ t.abbrev }})</span></h1>
-      <span class="text-sm text-surface-500">{{ t.wins }}-{{ t.losses }}-{{ t.ties }}</span>
+    <div class="flex items-start justify-between gap-4">
+      <div class="flex flex-col gap-2">
+        <h1 class="text-2xl font-semibold">
+          {{ t.name }}
+          @if (t.abbrev && t.abbrev !== t.name) {
+            <span class="text-surface-500">({{ t.abbrev }})</span>
+          }
+        </h1>
+        @if (t.leagueName) {
+          <p-chip [label]="t.leagueName" icon="pi pi-trophy" class="w-fit" />
+        }
+      </div>
+      <p-metergroup [value]="recordMeterValues(t)" [max]="recordMeterMax(t)" labelPosition="start" class="w-64 shrink-0">
+        <ng-template #label let-items>
+          <div class="flex items-center gap-3 text-sm mb-1 whitespace-nowrap">
+            @for (item of items; track item.label) {
+              <span class="flex items-center gap-1">
+                <span class="h-2 w-2 rounded-full inline-block" [style.background]="item.color"></span>
+                {{ item.value }} {{ item.label }}
+              </span>
+            }
+            @if (standingLabel(t); as standing) {
+              <span class="text-surface-500">· {{ standing }}</span>
+            }
+          </div>
+        </ng-template>
+      </p-metergroup>
     </div>
 
     <div>
@@ -12,46 +36,105 @@
           <tr>
             <th>Slot</th>
             <th>Player</th>
-            <th>Pos</th>
-            <th>Team</th>
+            <th>Opponent</th>
+            <th>Matchup</th>
+            <th class="!text-right">Proj</th>
+            <th class="!text-right">Pts</th>
             <th>Status</th>
           </tr>
         </ng-template>
         <ng-template pTemplate="body" let-player>
           <tr>
             <td>{{ player.slot }}</td>
-            <td>{{ player.fullName }}</td>
-            <td>{{ player.position }}</td>
-            <td>{{ player.proTeam }}</td>
             <td>
-              @if (player.injuryStatus) {
-                <p-tag severity="warn" [value]="player.injuryStatus" />
+              <div class="flex items-center gap-2">
+                <p-avatar [image]="player.headshotUrl" shape="circle" size="xlarge" />
+                <div class="flex flex-col">
+                  <span>{{ player.fullName }}</span>
+                  <span class="text-xs text-surface-500">{{ player.position }} · {{ player.proTeam }}</span>
+                </div>
+              </div>
+            </td>
+            <td>
+              @if (player.opponent) {
+                <div class="flex flex-col">
+                  <span>{{ player.opponentIsHome ? 'vs' : '@' }} {{ player.opponent }}</span>
+                  <span class="text-xs text-surface-500">{{ formatGameTime(player.gameTimeUtc) }}</span>
+                </div>
+              } @else {
+                <span class="text-surface-500">BYE</span>
               }
             </td>
+            <td>
+              @if (player.opponentPositionRank) {
+                <p-rating [ngModel]="matchupStars(player.opponentPositionRank)" [readonly]="true" [stars]="5" />
+              }
+            </td>
+            <td class="!text-right">{{ player.projectedPoints | number: '1.1-1' }}</td>
+            <td class="!text-right">{{ player.points | number: '1.1-1' }}</td>
+            <td>
+              @if (player.injuryStatus) {
+                <p-tag [severity]="statusSeverity(player.injuryStatus)" [value]="player.injuryStatus" />
+              }
+            </td>
+          </tr>
+        </ng-template>
+        <ng-template pTemplate="footer">
+          <tr>
+            <td colspan="4" class="!text-right font-medium">Total</td>
+            <td class="!text-right font-medium">{{ startersProjectedTotal() | number: '1.1-1' }}</td>
+            <td class="!text-right font-medium">{{ startersPointsTotal() | number: '1.1-1' }}</td>
+            <td></td>
           </tr>
         </ng-template>
       </p-table>
     </div>
 
     <div>
-      <h2 class="text-lg font-medium mb-2">Bench</h2>
       <p-table [value]="bench()" styleClass="p-datatable-sm">
         <ng-template pTemplate="header">
           <tr>
+            <th>Slot</th>
             <th>Player</th>
-            <th>Pos</th>
-            <th>Team</th>
+            <th>Opponent</th>
+            <th>Matchup</th>
+            <th class="!text-right">Proj</th>
+            <th class="!text-right">Pts</th>
             <th>Status</th>
           </tr>
         </ng-template>
         <ng-template pTemplate="body" let-player>
           <tr>
-            <td>{{ player.fullName }}</td>
-            <td>{{ player.position }}</td>
-            <td>{{ player.proTeam }}</td>
+            <td>Bench</td>
+            <td>
+              <div class="flex items-center gap-2">
+                <p-avatar [image]="player.headshotUrl" shape="circle" size="xlarge" />
+                <div class="flex flex-col">
+                  <span>{{ player.fullName }}</span>
+                  <span class="text-xs text-surface-500">{{ player.position }} · {{ player.proTeam }}</span>
+                </div>
+              </div>
+            </td>
+            <td>
+              @if (player.opponent) {
+                <div class="flex flex-col">
+                  <span>{{ player.opponentIsHome ? 'vs' : '@' }} {{ player.opponent }}</span>
+                  <span class="text-xs text-surface-500">{{ formatGameTime(player.gameTimeUtc) }}</span>
+                </div>
+              } @else {
+                <span class="text-surface-500">BYE</span>
+              }
+            </td>
+            <td>
+              @if (player.opponentPositionRank) {
+                <p-rating [ngModel]="matchupStars(player.opponentPositionRank)" [readonly]="true" [stars]="5" />
+              }
+            </td>
+            <td class="!text-right">{{ player.projectedPoints | number: '1.1-1' }}</td>
+            <td class="!text-right">{{ player.points | number: '1.1-1' }}</td>
             <td>
               @if (player.injuryStatus) {
-                <p-tag severity="warn" [value]="player.injuryStatus" />
+                <p-tag [severity]="statusSeverity(player.injuryStatus)" [value]="player.injuryStatus" />
               }
             </td>
           </tr>
