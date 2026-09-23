@@ -14,7 +14,7 @@ import { EspnApiService } from '../../services/espn-api.service';
 import { TeamStateService } from '../../services/team-state.service';
 import { DeviceIdService } from '../../services/device-id.service';
 import { CredentialsApiService } from '../../services/credentials-api.service';
-import { TeamSummary } from '../../models/team.model';
+import { ImportTeamRequest, TeamSummary } from '../../models/team.model';
 
 @Component({
   selector: 'app-import-team',
@@ -119,18 +119,19 @@ export class ImportTeamComponent implements OnInit {
     const { leagueId, season, teamId, isPrivate, espnS2, swid, rememberOnDevice } = this.form.value;
     this.errorMessage.set(null);
     this.importing.set(true);
+    const request: ImportTeamRequest = {
+      leagueId: leagueId!,
+      season: season!,
+      teamId: teamId!,
+      espnS2: isPrivate ? (espnS2 ?? undefined) : undefined,
+      swid: isPrivate ? (swid ?? undefined) : undefined,
+    };
     this.espnApi
-      .getTeam({
-        leagueId: leagueId!,
-        season: season!,
-        teamId: teamId!,
-        espnS2: isPrivate ? (espnS2 ?? undefined) : undefined,
-        swid: isPrivate ? (swid ?? undefined) : undefined,
-      })
+      .getTeam(request)
       .subscribe({
         next: (team) => {
           this.importing.set(false);
-          this.teamState.setTeam(team);
+          this.teamState.setTeam(team, request);
 
           if (rememberOnDevice && isPrivate && espnS2 && swid) {
             this.credentialsApi

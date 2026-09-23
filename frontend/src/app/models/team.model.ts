@@ -46,6 +46,48 @@ export interface ImportTeamRequest extends LeagueTeamsRequest {
   teamId: number;
 }
 
+export interface PlayerDetailRequest extends LeagueTeamsRequest {
+  playerId: number;
+}
+
+export type PlayerGameStatus = 'Played' | 'DidNotPlay' | 'Bye' | 'Upcoming';
+
+export interface PlayerSeasonSummary {
+  totalPoints: number;
+  averagePoints: number;
+  gamesPlayed: number;
+  positionRank: number | null;
+  seasonProjection: number;
+  restOfSeasonProjection: number;
+}
+
+// statLine lines up index-for-index with PlayerDetail.statColumns; null unless status is 'Played'.
+export interface PlayerGame {
+  week: number;
+  status: PlayerGameStatus;
+  opponent: string | null;
+  isHome: boolean | null;
+  gameTimeUtc: string | null;
+  opponentPositionRank: number | null;
+  projectedPoints: number | null;
+  points: number | null;
+  statLine: string[] | null;
+}
+
+export interface PlayerDetail {
+  playerId: number;
+  fullName: string;
+  position: string;
+  proTeam: string;
+  injuryStatus: string | null;
+  headshotUrl: string;
+  isTeamLogo: boolean;
+  currentWeek: number;
+  summary: PlayerSeasonSummary;
+  statColumns: string[];
+  games: PlayerGame[];
+}
+
 export interface SavedCredentials {
   espnS2: string;
   swid: string;
