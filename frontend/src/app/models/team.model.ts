@@ -61,7 +61,17 @@ export interface PlayerSeasonSummary {
   restOfSeasonProjection: number;
 }
 
-// statLine lines up index-for-index with PlayerDetail.statColumns; null unless status is 'Played'.
+// One scoring stat's contribution to a game's points. statValue is the raw stat (or the actual
+// points/yards allowed for a D/ST bracket); pointsEach is set only for stats that scale per unit.
+export interface ScoringLine {
+  label: string;
+  statValue: number | null;
+  pointsEach: number | null;
+  points: number;
+}
+
+// statLine lines up index-for-index with PlayerDetail.statColumns. statLine and scoringBreakdown
+// are null unless status is 'Played' (and ESPN sent per-stat points for the game).
 export interface PlayerGame {
   week: number;
   status: PlayerGameStatus;
@@ -72,6 +82,7 @@ export interface PlayerGame {
   projectedPoints: number | null;
   points: number | null;
   statLine: string[] | null;
+  scoringBreakdown: ScoringLine[] | null;
 }
 
 export interface PlayerDetail {

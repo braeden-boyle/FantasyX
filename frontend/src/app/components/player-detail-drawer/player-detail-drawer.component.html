@@ -155,7 +155,20 @@
                     [class.text-green-600]="(game.points ?? 0) > (game.projectedPoints ?? 0)"
                     [class.text-red-600]="(game.points ?? 0) < (game.projectedPoints ?? 0)"
                   >
-                    {{ game.points | number: '1.1-1' }}
+                    @if (game.scoringBreakdown) {
+                      <button
+                        type="button"
+                        class="points-button"
+                        aria-haspopup="dialog"
+                        [attr.aria-expanded]="breakdownGame() === game"
+                        [attr.aria-label]="'Show scoring breakdown for week ' + game.week"
+                        (click)="toggleBreakdown($event, game)"
+                      >
+                        {{ game.points | number: '1.1-1' }}
+                      </button>
+                    } @else {
+                      {{ game.points | number: '1.1-1' }}
+                    }
                   </td>
                   @if (game.statLine) {
                     @for (value of game.statLine; track $index) {
@@ -187,3 +200,43 @@
     }
   }
 </p-drawer>
+
+<p-popover appendTo="body" (onHide)="breakdownGame.set(null)">
+  @if (breakdownGame(); as game) {
+    <div class="flex flex-col gap-2" role="dialog" [attr.aria-label]="breakdownTitle()">
+      <span class="font-semibold">{{ breakdownTitle() }}</span>
+      <table class="breakdown-table">
+        <thead>
+          <tr>
+            <th>Stat</th>
+            <th class="text-right">Value</th>
+            <th class="text-right">Pts each</th>
+            <th class="text-right">Pts</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (line of game.scoringBreakdown; track line.label) {
+            <tr>
+              <td>{{ line.label }}</td>
+              <td class="text-right">{{ line.statValue === null ? '' : (line.statValue | number: '1.0-2') }}</td>
+              <td class="text-right text-surface-500">
+                {{ line.pointsEach === null ? '' : '× ' + (line.pointsEach | number: '1.0-2') }}
+              </td>
+              <td class="text-right" [class.text-red-600]="line.points < 0">{{ line.points | number: '1.1-2' }}</td>
+            </tr>
+          } @empty {
+            <tr>
+              <td colspan="4" class="text-surface-500">No scoring plays.</td>
+            </tr>
+          }
+        </tbody>
+        <tfoot>
+          <tr>
+            <td colspan="3">Total</td>
+            <td class="text-right">{{ game.points | number: '1.1-2' }}</td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  }
+</p-popover>

@@ -9,12 +9,14 @@ import {
   output,
   signal,
   untracked,
+  viewChild,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Subscription } from 'rxjs';
 import { Chart } from 'chart.js';
 import { DrawerModule } from 'primeng/drawer';
+import { Popover, PopoverModule } from 'primeng/popover';
 import { ChartModule } from 'primeng/chart';
 import { SkeletonModule } from 'primeng/skeleton';
 import { MessageModule } from 'primeng/message';
@@ -37,6 +39,7 @@ const NARROW_QUERY = '(max-width: 1023.98px)';
     CommonModule,
     FormsModule,
     DrawerModule,
+    PopoverModule,
     ChartModule,
     SkeletonModule,
     MessageModule,
@@ -64,6 +67,16 @@ export class PlayerDetailDrawerComponent {
   protected readonly detail = signal<PlayerDetail | null>(null);
   protected readonly loading = signal(false);
   protected readonly error = signal<string | null>(null);
+
+  // The past game whose scoring breakdown the popover is showing, if any.
+  protected readonly breakdownGame = signal<PlayerGame | null>(null);
+  protected readonly breakdownTitle = computed(() => {
+    const game = this.breakdownGame();
+    if (!game) return '';
+    const opponent = game.opponent ? ` ${this.opponentLabel(game)}` : '';
+    return `Week ${game.week}${opponent} scoring`;
+  });
+  private readonly breakdownPopover = viewChild.required(Popover);
 
   protected readonly maximized = signal(false);
   protected readonly narrow = signal(false);
@@ -155,8 +168,20 @@ export class PlayerDetailDrawerComponent {
     this.narrow.set(media.matches);
     const onChange = (e: MediaQueryListEvent) => this.narrow.set(e.matches);
     media.addEventListener('change', onChange);
+    // PrimeNG's drawer binds its own document-level Escape handler when it opens, so Escape would
+    // close the drawer along with the popover; catching it in the window's capture phase, before
+    // either component sees it, closes just the popover.
+    const onEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && this.breakdownGame()) {
+        event.stopImmediatePropagation();
+        this.breakdownPopover().hide();
+      }
+    };
+    window.addEventListener('keydown', onEscape, true);
+
     inject(DestroyRef).onDestroy(() => {
       media.removeEventListener('change', onChange);
+      window.removeEventListener('keydown', onEscape, true);
       this.loadSubscription?.unsubscribe();
     });
 
@@ -191,6 +216,18 @@ export class PlayerDetailDrawerComponent {
     }
   }
 
+  // Opens the popover on this game's points, moves it there from another game, or closes it if
+  // it's already showing this game.
+  protected toggleBreakdown(event: MouseEvent, game: PlayerGame): void {
+    const popover = this.breakdownPopover();
+    if (this.breakdownGame() === game) {
+      popover.hide();
+      return;
+    }
+    this.breakdownGame.set(game);
+    popover.show(event, event.currentTarget);
+  }
+
   protected opponentLabel(game: PlayerGame): string {
     return `${game.isHome ? 'vs' : '@'} ${game.opponent}`;
   }
@@ -207,6 +244,7 @@ export class PlayerDetailDrawerComponent {
     this.loading.set(true);
     if (this.detail()?.playerId !== playerId) {
       this.detail.set(null);
+      this.breakdownPopover().hide();
     }
 
     this.loadSubscription = this.playerDetail.load(playerId, force).subscribe({
