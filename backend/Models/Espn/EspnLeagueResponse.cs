@@ -34,8 +34,18 @@ public record EspnPlayerPoolEntry(EspnPlayer Player);
 public record EspnPlayer(
     int Id, string FullName, int DefaultPositionId, int ProTeamId, string? InjuryStatus, List<EspnPlayerStat>? Stats);
 
-// statSourceId 0 = actual, 1 = projected; only the fields needed to pick out this week's projection.
-public record EspnPlayerStat(int? ScoringPeriodId, int? StatSourceId, double? AppliedTotal);
+// statSourceId 0 = actual, 1 = projected; statSplitTypeId 0 = season total, 1 = single week.
+// ESPN ignores season filters, so SeasonId is needed to drop last season's entries. For weekly actuals,
+// ExternalId is the pro game id and ProTeamId the team the player played that game for.
+public record EspnPlayerStat(
+    int? ScoringPeriodId,
+    int? StatSourceId,
+    double? AppliedTotal,
+    int? SeasonId,
+    int? StatSplitTypeId,
+    string? ExternalId,
+    int? ProTeamId,
+    Dictionary<string, double>? Stats);
 
 // The current live/upcoming week; only populated when the "mStatus" view is requested.
 public record EspnStatus(int? LatestScoringPeriod);
