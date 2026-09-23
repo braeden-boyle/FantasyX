@@ -45,7 +45,8 @@ public record EspnPlayerStat(
     int? StatSplitTypeId,
     string? ExternalId,
     int? ProTeamId,
-    Dictionary<string, double>? Stats);
+    Dictionary<string, double>? Stats,
+    Dictionary<string, double>? AppliedStats);
 
 // The current live/upcoming week; only populated when the "mStatus" view is requested.
 public record EspnStatus(int? LatestScoringPeriod);

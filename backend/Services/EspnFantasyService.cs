@@ -257,7 +257,7 @@ public class EspnFantasyService : IEspnFantasyService
 
         if (game is null && actual is null && week == teamSchedule?.ByeWeek)
         {
-            return new PlayerGameDto(week, PlayerGameStatus.Bye, null, null, null, null, null, null, null);
+            return new PlayerGameDto(week, PlayerGameStatus.Bye, null, null, null, null, null, null, null, null);
         }
 
         var isHome = game is null ? (bool?)null : teamId == game.HomeProTeamId;
@@ -284,7 +284,8 @@ public class EspnFantasyService : IEspnFantasyService
                 PlayerGameStatus.DidNotPlay => 0,
                 _ => null,
             },
-            actual?.Stats is { } stats ? EspnStatColumns.FormatStatLine(position, stats) : null);
+            actual?.Stats is { } stats ? EspnStatColumns.FormatStatLine(position, stats) : null,
+            actual?.AppliedStats is { } appliedStats ? EspnScoringStats.Breakdown(appliedStats, actual.Stats) : null);
     }
 
     private static Dictionary<int, EspnPlayerStat> WeeklyStats(IEnumerable<EspnPlayerStat> seasonStats, int statSourceId) =>
