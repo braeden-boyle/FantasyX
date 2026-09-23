@@ -1,0 +1,189 @@
+<p-drawer
+  [visible]="!!player()"
+  (visibleChange)="onVisibleChange($event)"
+  position="right"
+  [fullScreen]="fullScreen()"
+  [styleClass]="fullScreen() ? '' : '!w-[75vw] !max-w-[1100px]'"
+  [blockScroll]="true"
+>
+  <ng-template #header>
+    @if (player(); as p) {
+      <div class="flex flex-1 items-center justify-between gap-4 min-w-0">
+        <div class="flex items-center gap-3 min-w-0">
+          <p-avatar [image]="p.headshotUrl" shape="circle" size="xlarge" />
+          <div class="flex flex-col min-w-0">
+            <div class="flex items-center gap-2">
+              <span class="text-xl font-semibold truncate">{{ p.fullName }}</span>
+              @if (p.injuryStatus) {
+                <p-tag [severity]="statusSeverity(p.injuryStatus)" [value]="p.injuryStatus" />
+              }
+            </div>
+            <span class="text-sm text-surface-500">
+              {{ p.position }} · {{ p.proTeam }}
+              @if (p.opponent) {
+                · This week {{ p.opponentIsHome ? 'vs' : '@' }} {{ p.opponent }}, {{ formatGameTime(p.gameTimeUtc) }}
+              } @else {
+                · Bye this week
+              }
+            </span>
+          </div>
+        </div>
+        <div class="flex items-center gap-1 shrink-0">
+          <p-button
+            icon="pi pi-chevron-left"
+            [text]="true"
+            [rounded]="true"
+            [disabled]="!hasPrevious()"
+            ariaLabel="Previous player"
+            (onClick)="previous.emit()"
+          />
+          <p-button
+            icon="pi pi-chevron-right"
+            [text]="true"
+            [rounded]="true"
+            [disabled]="!hasNext()"
+            ariaLabel="Next player"
+            (onClick)="next.emit()"
+          />
+          <p-button
+            icon="pi pi-refresh"
+            [text]="true"
+            [rounded]="true"
+            [disabled]="loading()"
+            ariaLabel="Refresh player details"
+            (onClick)="refresh()"
+          />
+          @if (!narrow()) {
+            <p-button
+              [icon]="maximized() ? 'pi pi-window-minimize' : 'pi pi-window-maximize'"
+              [text]="true"
+              [rounded]="true"
+              [ariaLabel]="maximized() ? 'Restore drawer size' : 'Expand to full screen'"
+              (onClick)="maximized.set(!maximized())"
+            />
+          }
+        </div>
+      </div>
+    }
+  </ng-template>
+
+  @if (error(); as message) {
+    <p-message severity="error" class="mt-2">
+      <div class="flex items-center gap-3">
+        <span>{{ message }}</span>
+        <p-button label="Retry" size="small" [outlined]="true" (onClick)="refresh()" />
+      </div>
+    </p-message>
+  } @else {
+    @if (detail(); as d) {
+      <div class="flex flex-col gap-6">
+        <div class="grid grid-cols-2 sm:grid-cols-5 gap-3">
+          <div class="stat-tile">
+            <span class="stat-label">Total pts</span>
+            <span class="stat-value">{{ d.summary.totalPoints | number: '1.1-1' }}</span>
+          </div>
+          <div class="stat-tile">
+            <span class="stat-label">Avg / game</span>
+            <span class="stat-value">{{ d.summary.averagePoints | number: '1.1-1' }}</span>
+          </div>
+          <div class="stat-tile">
+            <span class="stat-label">Position rank</span>
+            <span class="stat-value">{{ positionRankLabel() }}</span>
+          </div>
+          <div class="stat-tile">
+            <span class="stat-label">Games played</span>
+            <span class="stat-value">{{ d.summary.gamesPlayed }}</span>
+          </div>
+          <div class="stat-tile">
+            <span class="stat-label">Rest of season proj</span>
+            <span class="stat-value">{{ d.summary.restOfSeasonProjection | number: '1.0-0' }}</span>
+          </div>
+        </div>
+
+        <div class="h-64">
+          <p-chart
+            type="bar"
+            [data]="chartData()"
+            [options]="chartOptions"
+            height="100%"
+            ariaLabel="Weekly points versus projection"
+          />
+        </div>
+
+        <!-- p-table renders its templates out of this block's scope, so rows read signals rather than `d`. -->
+        <p-table [value]="d.games" styleClass="p-datatable-sm" [scrollable]="true">
+          <ng-template pTemplate="header">
+            <tr>
+              <th>Wk</th>
+              <th>Opp</th>
+              <th class="!text-right">Proj</th>
+              <th class="!text-right">Pts</th>
+              @for (column of statColumns(); track column) {
+                <th class="!text-right whitespace-nowrap">{{ column }}</th>
+              }
+            </tr>
+          </ng-template>
+          <ng-template pTemplate="body" let-game>
+            <tr [class.current-week-divider]="isFirstCurrentRow(game)" [class.text-surface-500]="game.status === 'Upcoming'">
+              <td>{{ game.week }}</td>
+              @switch (game.status) {
+                @case ('Bye') {
+                  <td [attr.colspan]="3 + statColumns().length" class="text-surface-500">BYE</td>
+                }
+                @case ('Upcoming') {
+                  <td>
+                    @if (game.opponent) {
+                      <div class="flex flex-col">
+                        <span class="whitespace-nowrap">{{ opponentLabel(game) }}</span>
+                        <span class="text-xs whitespace-nowrap">{{ formatGameDate(game.gameTimeUtc) }}</span>
+                      </div>
+                    }
+                  </td>
+                  <td class="!text-right">{{ game.projectedPoints | number: '1.1-1' }}</td>
+                  <td class="!text-right">—</td>
+                  <td [attr.colspan]="statColumns().length">
+                    @if (game.opponentPositionRank) {
+                      <p-rating [ngModel]="matchupStars(game.opponentPositionRank)" [readonly]="true" [stars]="5" />
+                    }
+                  </td>
+                }
+                @default {
+                  <td class="whitespace-nowrap">{{ game.opponent ? opponentLabel(game) : '—' }}</td>
+                  <td class="!text-right">{{ game.projectedPoints | number: '1.1-1' }}</td>
+                  <td
+                    class="!text-right font-medium"
+                    [class.text-green-600]="(game.points ?? 0) > (game.projectedPoints ?? 0)"
+                    [class.text-red-600]="(game.points ?? 0) < (game.projectedPoints ?? 0)"
+                  >
+                    {{ game.points | number: '1.1-1' }}
+                  </td>
+                  @if (game.statLine) {
+                    @for (value of game.statLine; track $index) {
+                      <td class="!text-right">{{ value }}</td>
+                    }
+                  } @else {
+                    <td [attr.colspan]="statColumns().length" class="text-surface-500">DNP</td>
+                  }
+                }
+              }
+            </tr>
+          </ng-template>
+        </p-table>
+      </div>
+    } @else if (loading()) {
+      <div class="flex flex-col gap-6" aria-busy="true">
+        <div class="grid grid-cols-2 sm:grid-cols-5 gap-3">
+          @for (i of [1, 2, 3, 4, 5]; track i) {
+            <p-skeleton height="4.5rem" />
+          }
+        </div>
+        <p-skeleton height="16rem" />
+        <div class="flex flex-col gap-2">
+          @for (i of [1, 2, 3, 4, 5, 6, 7, 8]; track i) {
+            <p-skeleton height="1.75rem" />
+          }
+        </div>
+      </div>
+    }
+  }
+</p-drawer>

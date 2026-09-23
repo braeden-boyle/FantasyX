@@ -44,7 +44,14 @@
           </tr>
         </ng-template>
         <ng-template pTemplate="body" let-player>
-          <tr>
+          <tr
+            class="cursor-pointer player-row"
+            tabindex="0"
+            [attr.aria-label]="'Show details for ' + player.fullName"
+            (click)="openPlayer(player)"
+            (keydown.enter)="openPlayer(player)"
+            (keydown.space)="$event.preventDefault(); openPlayer(player)"
+          >
             <td>{{ player.slot }}</td>
             <td>
               <div class="flex items-center gap-2">
@@ -104,7 +111,14 @@
           </tr>
         </ng-template>
         <ng-template pTemplate="body" let-player>
-          <tr>
+          <tr
+            class="cursor-pointer player-row"
+            tabindex="0"
+            [attr.aria-label]="'Show details for ' + player.fullName"
+            (click)="openPlayer(player)"
+            (keydown.enter)="openPlayer(player)"
+            (keydown.space)="$event.preventDefault(); openPlayer(player)"
+          >
             <td>Bench</td>
             <td>
               <div class="flex items-center gap-2">
@@ -144,6 +158,15 @@
 
     <a routerLink="/import" class="text-primary-600 underline text-sm">Import a different team</a>
   </div>
+
+  <app-player-detail-drawer
+    [player]="selectedPlayer()"
+    [hasPrevious]="hasPreviousPlayer()"
+    [hasNext]="hasNextPlayer()"
+    (previous)="stepPlayer(-1)"
+    (next)="stepPlayer(1)"
+    (closed)="closePlayer()"
+  />
 } @else {
   <div class="max-w-xl mx-auto mt-10 p-4 text-center text-surface-500">
     No team imported yet. <a routerLink="/import" class="text-primary-600 underline">Go import one</a>.

@@ -1,4 +1,4 @@
-import { Component, computed, inject } from '@angular/core';
+import { Component, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
@@ -10,6 +10,8 @@ import { MeterGroupModule, MeterItem } from 'primeng/metergroup';
 import { RatingModule } from 'primeng/rating';
 import { TeamStateService } from '../../services/team-state.service';
 import { Player, Team } from '../../models/team.model';
+import { PlayerDetailDrawerComponent } from '../player-detail-drawer/player-detail-drawer.component';
+import { formatGameTime, matchupStars, statusSeverity } from '../../utils/player-format';
 
 const STARTER_SLOT_ORDER = ['QB', 'RB', 'WR', 'TE', 'FLEX', 'D/ST', 'K'];
 
@@ -26,6 +28,7 @@ const STARTER_SLOT_ORDER = ['QB', 'RB', 'WR', 'TE', 'FLEX', 'D/ST', 'K'];
     ChipModule,
     MeterGroupModule,
     RatingModule,
+    PlayerDetailDrawerComponent,
   ],
   templateUrl: './team-display.component.html',
   styleUrl: './team-display.component.css',
@@ -47,33 +50,33 @@ export class TeamDisplayComponent {
   );
   protected readonly startersPointsTotal = computed(() => this.starters().reduce((sum, p) => sum + p.points, 0));
 
-  protected statusSeverity(status: string | null): 'success' | 'warn' | 'danger' {
-    switch (status?.toUpperCase()) {
-      case 'ACTIVE':
-        return 'success';
-      case 'QUESTIONABLE':
-        return 'warn';
-      default:
-        return 'danger';
-    }
+  protected readonly statusSeverity = statusSeverity;
+  protected readonly formatGameTime = formatGameTime;
+  protected readonly matchupStars = matchupStars;
+
+  // The player detail drawer steps through the roster in the order it's displayed.
+  protected readonly orderedPlayers = computed(() => [...this.starters(), ...this.bench()]);
+  private readonly selectedPlayerId = signal<number | null>(null);
+  private readonly selectedIndex = computed(() =>
+    this.orderedPlayers().findIndex((p) => p.playerId === this.selectedPlayerId()),
+  );
+  protected readonly selectedPlayer = computed(() => this.orderedPlayers()[this.selectedIndex()] ?? null);
+  protected readonly hasPreviousPlayer = computed(() => this.selectedIndex() > 0);
+  protected readonly hasNextPlayer = computed(
+    () => this.selectedIndex() >= 0 && this.selectedIndex() < this.orderedPlayers().length - 1,
+  );
+
+  protected openPlayer(player: Player): void {
+    this.selectedPlayerId.set(player.playerId);
   }
 
-  protected formatGameTime(gameTimeUtc: string | null): string | null {
-    if (!gameTimeUtc) {
-      return null;
-    }
-    return new Intl.DateTimeFormat(undefined, {
-      weekday: 'short',
-      hour: 'numeric',
-      minute: '2-digit',
-    }).format(new Date(gameTimeUtc));
+  protected closePlayer(): void {
+    this.selectedPlayerId.set(null);
   }
 
-  // ESPN's "rank vs position" is 1 (toughest matchup for that position) to 32 (easiest); scaled
-  // down to a 1-5 star rating where 1 star is a hard matchup and 5 stars is an easy one.
-  protected matchupStars(rank: number | null): number {
-    if (rank === null) return 0;
-    return Math.min(5, Math.max(1, Math.ceil((rank / 32) * 5)));
+  protected stepPlayer(offset: number): void {
+    const player = this.orderedPlayers()[this.selectedIndex() + offset];
+    if (player) this.selectedPlayerId.set(player.playerId);
   }
 
   protected recordMeterValues(t: Team): MeterItem[] {

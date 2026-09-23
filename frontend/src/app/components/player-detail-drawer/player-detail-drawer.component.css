@@ -1,0 +1,24 @@
+.stat-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.75rem 1rem;
+  border-radius: var(--p-border-radius-md);
+  background: var(--p-content-hover-background);
+}
+
+.stat-label {
+  font-size: 0.75rem;
+  color: var(--p-text-muted-color);
+}
+
+.stat-value {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--p-text-color);
+}
+
+/* Separates the game log (weeks already played) from the upcoming schedule. */
+.current-week-divider > td {
+  border-top: 2px solid var(--p-primary-400);
+}
