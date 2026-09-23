@@ -155,7 +155,6 @@ public class EspnFantasyService : IEspnFantasyService
                 HttpStatusCode.NotFound, $"Player {request.PlayerId} was not found in league {request.LeagueId}.");
 
         var player = card.Player;
-        var currentWeek = response.Status?.LatestScoringPeriod is int latestWeek and > 0 ? latestWeek : 1;
         var position = EspnLookups.PositionName(player.DefaultPositionId);
         var isTeamDefense = EspnLookups.IsDefenseSpecialTeams(player.DefaultPositionId);
 
@@ -164,6 +163,16 @@ public class EspnFantasyService : IEspnFantasyService
         var weeklyProjections = WeeklyStats(seasonStats, statSourceId: 1);
 
         var teamSchedule = schedules.FirstOrDefault(team => team.Id == player.ProTeamId);
+
+        // If the league doesn't report its current week, fall back to the player's team's first
+        // game that isn't final yet.
+        var currentWeek = response.Status?.LatestScoringPeriod is int latestWeek and > 0
+            ? latestWeek
+            : teamSchedule?.ProGamesByScoringPeriod?
+                .Where(entry => entry.Value is [{ StatsOfficial: not true }, ..])
+                .Select(entry => int.Parse(entry.Key))
+                .DefaultIfEmpty(1)
+                .Min() ?? 1;
         var gamesById = schedules
             .SelectMany(team => team.ProGamesByScoringPeriod?.Values.SelectMany(games => games) ?? [])
             .DistinctBy(game => game.Id)
