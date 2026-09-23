@@ -11,6 +11,8 @@ public class EspnFantasyService : IEspnFantasyService
 {
     private static readonly JsonSerializerOptions EspnJsonOptions = new() { PropertyNameCaseInsensitive = true };
 
+    private const int RegularSeasonWeeks = 18;
+
     private readonly HttpClient _httpClient;
 
     public EspnFantasyService(HttpClient httpClient)
@@ -124,15 +126,16 @@ public class EspnFantasyService : IEspnFantasyService
     public async Task<PlayerDetailDto> GetPlayerDetailAsync(
         PlayerDetailRequest request, CancellationToken cancellationToken)
     {
-        // ESPN applies filterIds but ignores season filters, so last season's stats come back too
-        // and are dropped below by SeasonId.
+        // For a real league, ESPN only returns per-week stats when the weeks are listed explicitly
+        // (source/split-type filters alone yield just season totals plus the current week). Listing
+        // weeks returns actuals and projections for each, but no season-total entries, so totals are
+        // summed from the weeks below. SeasonId is still checked in case other seasons slip through.
         var fantasyFilter = JsonSerializer.Serialize(new
         {
             players = new
             {
                 filterIds = new { value = new[] { request.PlayerId } },
-                filterStatsForSourceIds = new { value = new[] { 0, 1 } },
-                filterStatsForSplitTypeIds = new { value = new[] { 0, 1 } },
+                filterStatsForScoringPeriodIds = new { value = Enumerable.Range(1, RegularSeasonWeeks).ToArray() },
             },
         });
 
@@ -198,8 +201,7 @@ public class EspnFantasyService : IEspnFantasyService
                 response.PositionAgainstOpponent))
             .ToList();
 
-        var totalPoints = SeasonTotal(seasonStats, statSourceId: 0)
-            ?? weeklyActuals.Values.Sum(stat => stat.AppliedTotal ?? 0);
+        var totalPoints = weeklyActuals.Values.Sum(stat => stat.AppliedTotal ?? 0);
         var gamesPlayed = weeklyActuals.Count;
         var positionRank = card.Ratings?.GetValueOrDefault("0")?.PositionalRanking;
 
@@ -208,7 +210,7 @@ public class EspnFantasyService : IEspnFantasyService
             gamesPlayed == 0 ? 0 : totalPoints / gamesPlayed,
             gamesPlayed,
             positionRank is > 0 ? positionRank : null,
-            SeasonTotal(seasonStats, statSourceId: 1) ?? weeklyProjections.Values.Sum(stat => stat.AppliedTotal ?? 0),
+            weeklyProjections.Values.Sum(stat => stat.AppliedTotal ?? 0),
             games
                 .Where(game => game.Week >= currentWeek && game.Status != PlayerGameStatus.Bye)
                 .Sum(game => game.ProjectedPoints ?? 0));
@@ -290,9 +292,6 @@ public class EspnFantasyService : IEspnFantasyService
             .Where(stat => stat.StatSourceId == statSourceId && stat.StatSplitTypeId == 1 && stat.ScoringPeriodId > 0)
             .GroupBy(stat => stat.ScoringPeriodId!.Value)
             .ToDictionary(group => group.Key, group => group.First());
-
-    private static double? SeasonTotal(IEnumerable<EspnPlayerStat> seasonStats, int statSourceId) =>
-        seasonStats.FirstOrDefault(stat => stat.StatSourceId == statSourceId && stat.StatSplitTypeId == 0)?.AppliedTotal;
 
     private sealed record EspnScheduledGame(int OpponentProTeamId, bool IsHome, long DateMs);
 
