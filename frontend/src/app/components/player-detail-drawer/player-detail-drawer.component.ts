@@ -138,13 +138,21 @@ export class PlayerDetailDrawerComponent {
       legend: {
         position: 'bottom',
         labels: {
+          // Point-style icons let Projected show as a line segment rather than a dashed box. Point
+          // styles don't carry the dataset's dash pattern, so it's copied over to keep the segment
+          // dotted like the line it stands for.
+          usePointStyle: true,
+          pointStyleWidth: 24,
           // The Points bars are colored per week, so the legend would otherwise show whichever color
           // week 1 happened to get; pin it to the "met projection" color instead.
           generateLabels: (chart: Chart) =>
             Chart.defaults.plugins.legend.labels.generateLabels(chart).map((item) => {
-              if (item.datasetIndex !== 0) return item;
+              if (item.datasetIndex !== 0) {
+                const dataset = chart.data.datasets[item.datasetIndex ?? 0] as { borderDash?: number[] };
+                return { ...item, pointStyle: 'line' as const, lineDash: dataset.borderDash };
+              }
               const hitColor = getComputedStyle(document.documentElement).getPropertyValue('--p-primary-400');
-              return { ...item, fillStyle: hitColor, strokeStyle: hitColor };
+              return { ...item, fillStyle: hitColor, strokeStyle: hitColor, pointStyle: 'rect' as const };
             }),
         },
       },
