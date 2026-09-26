@@ -1,4 +1,6 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, computed, inject, input, signal } from '@angular/core';
+import { toObservable, toSignal } from '@angular/core/rxjs-interop';
+import { catchError, map, of, startWith, switchMap } from 'rxjs';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
@@ -8,8 +10,12 @@ import { AvatarModule } from 'primeng/avatar';
 import { ChipModule } from 'primeng/chip';
 import { MeterGroupModule, MeterItem } from 'primeng/metergroup';
 import { RatingModule } from 'primeng/rating';
+import { ProgressSpinnerModule } from 'primeng/progressspinner';
+import { MessageModule } from 'primeng/message';
+import { ButtonModule } from 'primeng/button';
 import { TeamStateService } from '../../services/team-state.service';
-import { Player, Team } from '../../models/team.model';
+import { EspnApiService } from '../../services/espn-api.service';
+import { ImportTeamRequest, Player, Team } from '../../models/team.model';
 import { PlayerDetailDrawerComponent } from '../player-detail-drawer/player-detail-drawer.component';
 import { formatGameTime, matchupStars, statusSeverity } from '../../utils/player-format';
 
@@ -28,6 +34,9 @@ const STARTER_SLOT_ORDER = ['QB', 'RB', 'WR', 'TE', 'FLEX', 'D/ST', 'K'];
     ChipModule,
     MeterGroupModule,
     RatingModule,
+    ProgressSpinnerModule,
+    MessageModule,
+    ButtonModule,
     PlayerDetailDrawerComponent,
   ],
   templateUrl: './team-display.component.html',
@@ -35,8 +44,50 @@ const STARTER_SLOT_ORDER = ['QB', 'RB', 'WR', 'TE', 'FLEX', 'D/ST', 'K'];
 })
 export class TeamDisplayComponent {
   protected readonly teamState = inject(TeamStateService);
+  private readonly espnApi = inject(EspnApiService);
 
-  protected readonly team = this.teamState.team;
+  // Bound from the /team/:teamId route param; absent on plain /team, which means the user's own team.
+  readonly teamId = input<string>();
+
+  protected readonly isOwnTeam = computed(() => {
+    const id = this.teamId();
+    return id === undefined || Number(id) === this.teamState.myTeamId();
+  });
+
+  // The user's own team is the cached import result; any other team is fetched fresh on every visit.
+  private readonly reloadCount = signal(0);
+  private readonly otherTeamRequest = computed<ImportTeamRequest | null>(() => {
+    const request = this.teamState.importRequest();
+    if (!request || this.isOwnTeam()) {
+      return null;
+    }
+    this.reloadCount();
+    return { ...request, teamId: Number(this.teamId()) };
+  });
+  private readonly otherTeamLoad = toSignal(
+    toObservable(this.otherTeamRequest).pipe(
+      switchMap((request) =>
+        request
+          ? this.espnApi.getTeam(request).pipe(
+              map((team) => ({ team, error: null })),
+              catchError((err) => of({ team: null, error: err?.error?.title ?? 'Could not load that team.' })),
+              startWith(null),
+            )
+          : of(null),
+      ),
+    ),
+    { initialValue: null },
+  );
+
+  protected readonly loading = computed(() => this.otherTeamRequest() !== null && this.otherTeamLoad() === null);
+  protected readonly errorMessage = computed(() => this.otherTeamLoad()?.error ?? null);
+  protected readonly team = computed<Team | null>(() =>
+    this.isOwnTeam() ? this.teamState.team() : (this.otherTeamLoad()?.team ?? null),
+  );
+
+  protected retry(): void {
+    this.reloadCount.update((n) => n + 1);
+  }
 
   protected readonly starters = computed<Player[]>(() =>
     [...(this.team()?.players ?? [])]

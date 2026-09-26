@@ -1,3 +1,13 @@
 :host {
   display: block;
 }
+
+.app-header {
+  border-bottom: 1px solid var(--p-content-border-color);
+}
+
+/* The header supplies the bottom rule, so the tab list drops its own border and background. */
+.app-header ::ng-deep .p-tablist-tab-list {
+  border-bottom: none;
+  background: transparent;
+}

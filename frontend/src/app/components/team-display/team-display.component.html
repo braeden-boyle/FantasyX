@@ -1,5 +1,31 @@
-@if (team(); as t) {
+@if (!teamState.importRequest()) {
+  <div class="max-w-xl mx-auto mt-10 p-4 text-center text-surface-500">
+    No team imported yet. <a routerLink="/import" class="text-primary-600 underline">Go import one</a>.
+  </div>
+} @else if (loading()) {
+  <div class="flex justify-center mt-16">
+    <p-progress-spinner ariaLabel="Loading team" />
+  </div>
+} @else if (errorMessage()) {
+  @let message = errorMessage()!;
+  <div class="max-w-xl mx-auto mt-10 p-4 flex flex-col items-start gap-3">
+    <p-message severity="error" [text]="message" class="w-full" />
+    <div class="flex items-center gap-4">
+      <p-button label="Retry" icon="pi pi-refresh" size="small" (onClick)="retry()" />
+      <a routerLink="/league" class="text-primary-600 underline text-sm">Back to League</a>
+    </div>
+  </div>
+} @else if (team()) {
+  @let t = team()!;
   <div class="max-w-4xl mx-auto mt-10 p-4 flex flex-col gap-6">
+    @if (!isOwnTeam()) {
+      <p-message severity="secondary" icon="pi pi-eye">
+        <span>
+          Viewing {{ t.name }} ·
+          <a routerLink="/league" class="text-primary-600 underline">Back to League</a>
+        </span>
+      </p-message>
+    }
     <div class="flex items-start justify-between gap-4">
       <div class="flex flex-col gap-2">
         <h1 class="text-2xl font-semibold">
@@ -156,7 +182,9 @@
       </p-table>
     </div>
 
-    <a routerLink="/import" class="text-primary-600 underline text-sm">Import a different team</a>
+    @if (isOwnTeam()) {
+      <a routerLink="/import" class="text-primary-600 underline text-sm">Import a different team</a>
+    }
   </div>
 
   <app-player-detail-drawer
@@ -167,8 +195,4 @@
     (next)="stepPlayer(1)"
     (closed)="closePlayer()"
   />
-} @else {
-  <div class="max-w-xl mx-auto mt-10 p-4 text-center text-surface-500">
-    No team imported yet. <a routerLink="/import" class="text-primary-600 underline">Go import one</a>.
-  </div>
 }

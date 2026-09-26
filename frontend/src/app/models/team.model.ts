@@ -29,6 +29,40 @@ export interface Team {
   players: Player[];
 }
 
+// streak is compact, e.g. "W3"; seed is 0 when ESPN hasn't ranked teams yet.
+export interface Standing {
+  teamId: number;
+  seed: number;
+  name: string;
+  abbrev: string;
+  logoUrl: string | null;
+  owners: string[];
+  wins: number;
+  losses: number;
+  ties: number;
+  pointsFor: number;
+  pointsAgainst: number;
+  streak: string | null;
+}
+
+export interface MatchupSide {
+  teamId: number;
+  points: number;
+  projectedPoints: number | null;
+}
+
+export interface Matchup {
+  home: MatchupSide;
+  away: MatchupSide;
+}
+
+export interface League {
+  leagueName: string;
+  currentMatchupPeriod: number;
+  standings: Standing[];
+  matchups: Matchup[];
+}
+
 export interface TeamSummary {
   teamId: number;
   name: string;

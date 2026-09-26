@@ -1,0 +1,124 @@
+@if (!teamState.importRequest()) {
+  <div class="max-w-xl mx-auto mt-10 p-4 text-center text-surface-500">
+    No team imported yet. <a routerLink="/import" class="text-primary-600 underline">Go import one</a>.
+  </div>
+} @else if (loading()) {
+  <div class="flex justify-center mt-16">
+    <p-progress-spinner ariaLabel="Loading league" />
+  </div>
+} @else if (errorMessage()) {
+  @let message = errorMessage()!;
+  <div class="max-w-xl mx-auto mt-10 p-4 flex flex-col items-start gap-3">
+    <p-message severity="error" [text]="message" class="w-full" />
+    <p-button label="Retry" icon="pi pi-refresh" size="small" (onClick)="retry()" />
+  </div>
+} @else if (league()) {
+  @let l = league()!;
+  <div class="max-w-6xl mx-auto mt-10 p-4 flex flex-col gap-6">
+    <div class="flex flex-col gap-2">
+      <h1 class="text-2xl font-semibold">League</h1>
+      @if (l.leagueName) {
+        <p-chip [label]="l.leagueName" icon="pi pi-trophy" class="w-fit" />
+      }
+    </div>
+
+    <!-- Standings beside a single column of matchups; they stack on narrow screens. -->
+    <div class="grid gap-6 grid-cols-1 lg:grid-cols-[minmax(0,1fr)_22rem] items-start">
+    <section class="min-w-0">
+      <h2 class="text-lg font-medium mb-2">Standings</h2>
+      <p-table [value]="l.standings" styleClass="p-datatable-sm">
+        <ng-template pTemplate="header">
+          <tr>
+            <th>#</th>
+            <th>Team</th>
+            <th>Record</th>
+            <th class="!text-right">PF</th>
+            <th class="!text-right">PA</th>
+            <th>Streak</th>
+          </tr>
+        </ng-template>
+        <ng-template pTemplate="body" let-s>
+          <tr
+            class="cursor-pointer team-row"
+            [class.team-row-mine]="isMine(s.teamId)"
+            tabindex="0"
+            [attr.aria-label]="'Show roster for ' + s.name"
+            (click)="openTeam(s.teamId)"
+            (keydown.enter)="openTeam(s.teamId)"
+            (keydown.space)="$event.preventDefault(); openTeam(s.teamId)"
+          >
+            <td>{{ s.seed || '–' }}</td>
+            <td>
+              <div class="flex items-center gap-2">
+                <app-team-logo [logoUrl]="s.logoUrl" [abbrev]="s.abbrev" size="large" />
+                <div class="flex flex-col">
+                  <span [class.font-semibold]="isMine(s.teamId)">{{ s.name }}</span>
+                  @if (s.owners.length) {
+                    <span class="text-xs text-surface-500">{{ s.owners.join(', ') }}</span>
+                  }
+                </div>
+              </div>
+            </td>
+            <td>{{ record(s) }}</td>
+            <td class="!text-right">{{ s.pointsFor | number: '1.1-1' }}</td>
+            <td class="!text-right">{{ s.pointsAgainst | number: '1.1-1' }}</td>
+            <td>
+              @if (s.streak) {
+                <p-tag [severity]="streakSeverity(s.streak)" [value]="s.streak" />
+              }
+            </td>
+          </tr>
+        </ng-template>
+      </p-table>
+    </section>
+
+    <section>
+      <h2 class="text-lg font-medium mb-2">
+        Matchups
+        @if (l.currentMatchupPeriod) {
+          <span class="text-surface-500 font-normal">· Week {{ l.currentMatchupPeriod }}</span>
+        }
+      </h2>
+      @if (matchups().length) {
+        <div class="flex flex-col gap-3">
+          @for (m of matchups(); track m.home.teamId) {
+            <p-card
+              class="matchup-card"
+              [class.matchup-card-mine]="isMine(m.home.teamId) || isMine(m.away.teamId)"
+            >
+              @for (side of [m.away, m.home]; track side.teamId) {
+                @let s = standing(side.teamId);
+                @let opponent = side === m.home ? m.away : m.home;
+                <!-- Not clickable yet: this will open a matchup view (both rosters side by side), not a roster. -->
+                <div class="matchup-side">
+                  <app-team-logo [logoUrl]="s?.logoUrl ?? null" [abbrev]="s?.abbrev ?? ''" />
+                  <div class="flex flex-col min-w-0 flex-1">
+                    <span class="truncate" [class.font-semibold]="isMine(side.teamId)">
+                      {{ s?.name ?? 'Team ' + side.teamId }}
+                    </span>
+                    @if (s) {
+                      <span class="text-xs text-surface-500">{{ record(s) }}</span>
+                    }
+                  </div>
+                  <div class="flex flex-col items-end">
+                    <span class="text-lg tabular-nums" [class.font-semibold]="side.points > opponent.points">
+                      {{ side.points | number: '1.1-1' }}
+                    </span>
+                    @if (side.projectedPoints !== null) {
+                      <span class="text-xs text-surface-500 tabular-nums">
+                        Proj {{ side.projectedPoints | number: '1.1-1' }}
+                      </span>
+                    }
+                  </div>
+                </div>
+              }
+            </p-card>
+          }
+        </div>
+      } @else {
+        <p class="text-surface-500 text-sm">No matchups this week.</p>
+      }
+    </section>
+    </div>
+  </div>
+}
