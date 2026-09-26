@@ -42,6 +42,8 @@ public static class EspnLookups
 
     private static readonly HashSet<int> BenchSlots = [20, 21];
 
+    private const int DefenseSpecialTeamsPositionId = 16;
+
     public static string PositionName(int defaultPositionId) =>
         Positions.GetValueOrDefault(defaultPositionId, $"POS_{defaultPositionId}");
 
@@ -52,4 +54,23 @@ public static class EspnLookups
         LineupSlots.GetValueOrDefault(lineupSlotId, $"SLOT_{lineupSlotId}");
 
     public static bool IsStarterSlot(int lineupSlotId) => !BenchSlots.Contains(lineupSlotId);
+
+    public static bool IsDefenseSpecialTeams(int defaultPositionId) => defaultPositionId == DefenseSpecialTeamsPositionId;
+
+    // D/ST "players" have no individual headshot; ESPN's own team logos stand in for them instead.
+    public static string TeamLogoUrl(int proTeamId) =>
+        $"https://a.espncdn.com/i/teamlogos/nfl/500/{ProTeamAbbrev(proTeamId).ToLowerInvariant()}.png";
+
+    // Player headshots come back at 600x436; resized server-side via ESPN's image combiner (height
+    // only, so aspect ratio is preserved) instead of shipping the full image for the UI to shrink to
+    // an avatar-sized thumbnail, which looked soft/artifacted after that much client-side downscaling.
+    public static string HeadshotUrl(int playerId) =>
+        $"https://a.espncdn.com/combiner/i?img=/i/headshots/nfl/players/full/{playerId}.png&h=128";
+
+    // ESPN names D/ST "players" like "49ers D/ST"; the " D/ST" suffix is redundant once the
+    // position is already shown alongside the name, so it's trimmed for display.
+    public static string TeamDefenseName(string fullName) =>
+        fullName.EndsWith(" D/ST", StringComparison.OrdinalIgnoreCase)
+            ? fullName[..^" D/ST".Length]
+            : fullName;
 }

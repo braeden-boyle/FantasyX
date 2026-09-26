@@ -1,0 +1,70 @@
+.stat-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.75rem 1rem;
+  border-radius: var(--p-border-radius-md);
+  background: var(--p-content-hover-background);
+}
+
+.stat-label {
+  font-size: 0.75rem;
+  color: var(--p-text-muted-color);
+}
+
+.stat-value {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--p-text-color);
+}
+
+/* Separates the game log (weeks already played) from the upcoming schedule. */
+.current-week-divider > td {
+  border-top: 2px solid var(--p-primary-400);
+}
+
+/* Past weeks' points open a scoring breakdown popover; styled as text rather than a filled button
+   so the column still reads as numbers. */
+.points-button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+}
+
+.points-button:focus-visible {
+  outline: 2px solid var(--p-primary-400);
+  outline-offset: 2px;
+}
+
+.breakdown-table {
+  width: 100%;
+  min-width: 20rem;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.breakdown-table th {
+  font-weight: 500;
+  color: var(--p-text-muted-color);
+  text-align: left;
+}
+
+.breakdown-table th,
+.breakdown-table td {
+  padding: 0.3rem 0.5rem;
+  border-bottom: 1px solid var(--p-content-border-color);
+}
+
+.breakdown-table .text-right {
+  text-align: right;
+}
+
+.breakdown-table tfoot td {
+  font-weight: 600;
+  border-bottom: none;
+}

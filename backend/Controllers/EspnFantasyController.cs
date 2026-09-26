@@ -29,4 +29,12 @@ public class EspnFantasyController : ControllerBase
         var team = await _espnFantasyService.GetTeamRosterAsync(request, cancellationToken);
         return Ok(team);
     }
+
+    [HttpPost("player")]
+    public async Task<ActionResult<PlayerDetailDto>> GetPlayer(
+        PlayerDetailRequest request, CancellationToken cancellationToken)
+    {
+        var player = await _espnFantasyService.GetPlayerDetailAsync(request, cancellationToken);
+        return Ok(player);
+    }
 }

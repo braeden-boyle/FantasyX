@@ -19,4 +19,14 @@ Content-Type: application/json
   "teamId": 1
 }
 
+### Get a player's detail (season summary, weekly game log, and schedule)
+POST {{FantasyX.Backend_HostAddress}}/api/espn/player
+Content-Type: application/json
+
+{
+  "leagueId": 123456,
+  "season": 2024,
+  "playerId": 3918298
+}
+
 ###

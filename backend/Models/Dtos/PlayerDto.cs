@@ -8,4 +8,11 @@ public record PlayerDto(
     string Slot,
     bool Starter,
     string? InjuryStatus,
-    string HeadshotUrl);
+    string HeadshotUrl,
+    bool IsTeamLogo,
+    double ProjectedPoints,
+    double Points,
+    string? Opponent,
+    bool? OpponentIsHome,
+    DateTimeOffset? GameTimeUtc,
+    int? OpponentPositionRank);
