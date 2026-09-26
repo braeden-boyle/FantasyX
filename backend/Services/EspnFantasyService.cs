@@ -31,6 +31,124 @@ public class EspnFantasyService : IEspnFantasyService
             .ToList() ?? [];
     }
 
+    public async Task<LeagueDto> GetLeagueAsync(LeagueTeamsRequest request, CancellationToken cancellationToken)
+    {
+        var league = await FetchLeagueAsync<EspnLeagueResponse>(
+            request.LeagueId,
+            request.Season,
+            ["mTeam", "mStandings", "mSettings", "mStatus", "mMatchupScore", "mScoreboard"],
+            request.EspnS2,
+            request.Swid,
+            null,
+            cancellationToken);
+
+        var membersById = league.Members?
+            .Where(member => member.Id is not null)
+            .DistinctBy(member => member.Id)
+            .ToDictionary(member => member.Id!, MemberName) ?? [];
+
+        var standings = league.Teams?
+            .Select(team => ToStandingDto(team, membersById))
+            .OrderBy(standing => standing.Seed == 0 ? int.MaxValue : standing.Seed)
+            .ThenBy(standing => standing.TeamId)
+            .ToList() ?? [];
+
+        var period = league.Status?.CurrentMatchupPeriod ?? 0;
+
+        // Byes (no away side) are left out, since there's nothing to show for them.
+        var matchups = league.Schedule?
+            .Where(entry => entry.MatchupPeriodId == period && entry.Home is not null && entry.Away is not null)
+            .Select(entry => new MatchupDto(ToMatchupSideDto(entry.Home!), ToMatchupSideDto(entry.Away!)))
+            .ToList() ?? [];
+
+        return new LeagueDto(league.Settings?.Name ?? string.Empty, period, standings, matchups);
+    }
+
+    // Logos a manager uploaded (rather than picked from ESPN's presets) are served from this host,
+    // which 401s without the league's cookies, so the browser can't load them directly.
+    private const string UploadedLogoHost = "mystique-api.fantasy.espn.com";
+    private const string UploadedLogoPathPrefix = "/apis/v1/domains/lm/images/";
+    private const int MaxLogoBytes = 2 * 1024 * 1024;
+
+    public async Task<TeamLogoImage> GetTeamLogoAsync(TeamLogoRequest request, CancellationToken cancellationToken)
+    {
+        // Only ever fetch ESPN's uploaded-logo URLs, so this can't be used as an open proxy.
+        if (!Uri.TryCreate(request.Url, UriKind.Absolute, out var url)
+            || url.Scheme != Uri.UriSchemeHttps
+            || !url.Host.Equals(UploadedLogoHost, StringComparison.OrdinalIgnoreCase)
+            || !url.AbsolutePath.StartsWith(UploadedLogoPathPrefix, StringComparison.Ordinal))
+        {
+            throw new EspnApiException(HttpStatusCode.BadRequest, "Only ESPN-hosted team logos can be loaded.");
+        }
+
+        using var httpRequest = new HttpRequestMessage(HttpMethod.Get, url);
+        // This host's edge rejects requests with no User-Agent (a bare nginx 403), unlike the league API.
+        httpRequest.Headers.UserAgent.ParseAdd("FantasyX/1.0");
+        if (!string.IsNullOrWhiteSpace(request.EspnS2) && !string.IsNullOrWhiteSpace(request.Swid))
+        {
+            httpRequest.Headers.Add("Cookie", $"espn_s2={request.EspnS2}; SWID={request.Swid}");
+        }
+
+        using var response = await _httpClient.SendAsync(
+            httpRequest, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+
+        var contentType = response.Content.Headers.ContentType?.MediaType;
+        if (!response.IsSuccessStatusCode || contentType is null || !contentType.StartsWith("image/"))
+        {            throw new EspnApiException(HttpStatusCode.NotFound, "That team logo could not be loaded.");
+        }
+        if (response.Content.Headers.ContentLength > MaxLogoBytes)
+        {
+            throw new EspnApiException(HttpStatusCode.BadGateway, "That team logo is too large.");
+        }
+
+        var content = await response.Content.ReadAsByteArrayAsync(cancellationToken);
+        return new TeamLogoImage(content, contentType);
+    }
+
+    private static StandingDto ToStandingDto(EspnTeam team, IReadOnlyDictionary<string, string> membersById)
+    {
+        var overall = team.Record?.Overall;
+        var owners = team.Owners?
+            .Select(ownerId => membersById.GetValueOrDefault(ownerId))
+            .OfType<string>()
+            .ToList() ?? [];
+
+        return new StandingDto(
+            team.Id,
+            team.PlayoffSeed ?? 0,
+            TeamName(team),
+            team.Abbrev ?? string.Empty,
+            string.IsNullOrWhiteSpace(team.Logo) ? null : team.Logo,
+            owners,
+            overall?.Wins ?? 0,
+            overall?.Losses ?? 0,
+            overall?.Ties ?? 0,
+            overall?.PointsFor ?? 0,
+            overall?.PointsAgainst ?? 0,
+            StreakLabel(overall));
+    }
+
+    private static string? StreakLabel(EspnOverallRecord? overall)
+    {
+        var prefix = overall?.StreakType switch
+        {
+            "WIN" => "W",
+            "LOSS" => "L",
+            "TIE" => "T",
+            _ => null,
+        };
+        return prefix is null || overall?.StreakLength is not > 0 ? null : $"{prefix}{overall.StreakLength}";
+    }
+
+    private static MatchupSideDto ToMatchupSideDto(EspnMatchupSide side) =>
+        new(side.TeamId, side.TotalPointsLive ?? side.TotalPoints ?? 0, side.TotalProjectedPointsLive);
+
+    private static string MemberName(EspnMember member)
+    {
+        var fullName = $"{member.FirstName} {member.LastName}".Trim();
+        return string.IsNullOrWhiteSpace(fullName) ? member.DisplayName ?? "Unknown" : fullName;
+    }
+
     public async Task<TeamDto> GetTeamRosterAsync(ImportTeamRequest request, CancellationToken cancellationToken)
     {
         var league = await FetchLeagueAsync<EspnLeagueResponse>(
