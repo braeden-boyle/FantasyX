@@ -1,0 +1,44 @@
+:host {
+  display: block;
+}
+
+/* Each side of a matchup is its own clickable row, so the card body drops its padding. */
+.matchup-card {
+  display: block;
+  overflow: hidden;
+  border-radius: var(--p-card-border-radius);
+}
+
+.matchup-card-mine {
+  outline: 2px solid var(--p-primary-color);
+}
+
+:host ::ng-deep .matchup-card .p-card-body {
+  padding: 0;
+  gap: 0;
+}
+
+.matchup-side {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.625rem 0.875rem;
+}
+
+.matchup-side + .matchup-side {
+  border-top: 1px solid var(--p-content-border-color);
+}
+
+.team-row:hover > td,
+.team-row:focus-visible > td {
+  background: var(--p-content-hover-background);
+}
+
+.team-row-mine > td {
+  background: var(--p-highlight-background);
+}
+
+.team-row:focus-visible {
+  outline: 2px solid var(--p-primary-400);
+  outline-offset: -2px;
+}

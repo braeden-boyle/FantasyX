@@ -9,6 +9,15 @@ Content-Type: application/json
   "season": 2024
 }
 
+### Get a league's standings and current-week matchups
+POST {{FantasyX.Backend_HostAddress}}/api/espn/league
+Content-Type: application/json
+
+{
+  "leagueId": 123456,
+  "season": 2024
+}
+
 ### Import a specific team's roster
 POST {{FantasyX.Backend_HostAddress}}/api/espn/team
 Content-Type: application/json

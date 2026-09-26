@@ -23,6 +23,20 @@ public class EspnFantasyController : ControllerBase
         return Ok(teams);
     }
 
+    [HttpPost("league")]
+    public async Task<ActionResult<LeagueDto>> GetLeague(LeagueTeamsRequest request, CancellationToken cancellationToken)
+    {
+        var league = await _espnFantasyService.GetLeagueAsync(request, cancellationToken);
+        return Ok(league);
+    }
+
+    [HttpPost("logo")]
+    public async Task<IActionResult> GetTeamLogo(TeamLogoRequest request, CancellationToken cancellationToken)
+    {
+        var logo = await _espnFantasyService.GetTeamLogoAsync(request, cancellationToken);
+        return File(logo.Content, logo.ContentType);
+    }
+
     [HttpPost("team")]
     public async Task<ActionResult<TeamDto>> GetTeam(ImportTeamRequest request, CancellationToken cancellationToken)
     {
