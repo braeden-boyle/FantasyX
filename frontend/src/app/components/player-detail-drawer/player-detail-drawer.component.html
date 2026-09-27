@@ -10,7 +10,7 @@
     @if (player(); as p) {
       <div class="flex flex-1 items-center justify-between gap-4 min-w-0">
         <div class="flex items-center gap-3 min-w-0">
-          <p-avatar [image]="p.headshotUrl" shape="circle" size="xlarge" />
+          <app-player-avatar [player]="p" />
           <div class="flex flex-col min-w-0">
             <div class="flex items-center gap-2">
               <span class="text-xl font-semibold truncate">{{ p.fullName }}</span>
@@ -205,38 +205,7 @@
   @if (breakdownGame(); as game) {
     <div class="flex flex-col gap-2" role="dialog" [attr.aria-label]="breakdownTitle()">
       <span class="font-semibold">{{ breakdownTitle() }}</span>
-      <table class="breakdown-table">
-        <thead>
-          <tr>
-            <th>Stat</th>
-            <th class="text-right">Value</th>
-            <th class="text-right">Pts each</th>
-            <th class="text-right">Pts</th>
-          </tr>
-        </thead>
-        <tbody>
-          @for (line of game.scoringBreakdown; track line.label) {
-            <tr>
-              <td>{{ line.label }}</td>
-              <td class="text-right">{{ line.statValue === null ? '' : (line.statValue | number: '1.0-2') }}</td>
-              <td class="text-right text-surface-500">
-                {{ line.pointsEach === null ? '' : '× ' + (line.pointsEach | number: '1.0-2') }}
-              </td>
-              <td class="text-right" [class.text-red-600]="line.points < 0">{{ line.points | number: '1.1-2' }}</td>
-            </tr>
-          } @empty {
-            <tr>
-              <td colspan="4" class="text-surface-500">No scoring plays.</td>
-            </tr>
-          }
-        </tbody>
-        <tfoot>
-          <tr>
-            <td colspan="3">Total</td>
-            <td class="text-right">{{ game.points | number: '1.1-2' }}</td>
-          </tr>
-        </tfoot>
-      </table>
+      <app-scoring-breakdown [game]="game" />
     </div>
   }
 </p-popover>

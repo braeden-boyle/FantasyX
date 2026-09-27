@@ -1,20 +1,22 @@
 <header class="app-header">
-  <nav class="max-w-6xl mx-auto px-4 flex items-center gap-6">
+  <nav class="max-w-6xl mx-auto px-4 flex items-center gap-3 sm:gap-6">
     <span class="font-semibold text-lg py-3">{{ title }}</span>
     @if (hasTeam()) {
       <p-tabs [value]="activeTab()" (valueChange)="navigate($event)" class="self-end">
         <p-tablist>
           @for (tab of tabs; track tab.route) {
-            <p-tab [value]="tab.route" class="flex items-center !gap-2">
+            <p-tab [value]="tab.route" class="flex items-center !gap-2" [attr.aria-label]="tab.label">
               <i [class]="tab.icon"></i>
-              <span>{{ tab.label }}</span>
+              <!-- Icons only on phones, so all the tabs fit beside the title. -->
+              <span class="hidden sm:inline">{{ tab.label }}</span>
             </p-tab>
           }
         </p-tablist>
       </p-tabs>
     }
     <p-button
-      class="ml-auto"
+      class="ml-auto import-button"
+      [ariaLabel]="hasTeam() ? 'Change team' : 'Import'"
       [label]="hasTeam() ? 'Change team' : 'Import'"
       icon="pi pi-download"
       [text]="true"

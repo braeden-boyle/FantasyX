@@ -63,6 +63,23 @@ export interface League {
   matchups: Matchup[];
 }
 
+// points are totals for the whole matchup period; each player's points are for scoringPeriod only.
+export interface MatchupTeam {
+  team: Team;
+  logoUrl: string | null;
+  points: number;
+  projectedPoints: number | null;
+}
+
+// opponent is null when the team has no matchup this period (a bye, or out of the playoffs).
+export interface MatchupDetail {
+  leagueName: string;
+  matchupPeriod: number;
+  scoringPeriod: number;
+  team: MatchupTeam;
+  opponent: MatchupTeam | null;
+}
+
 export interface TeamSummary {
   teamId: number;
   name: string;

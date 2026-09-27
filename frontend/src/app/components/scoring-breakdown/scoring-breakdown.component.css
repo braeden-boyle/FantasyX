@@ -1,0 +1,31 @@
+:host {
+  display: block;
+}
+
+.breakdown-table {
+  width: 100%;
+  min-width: 20rem;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.breakdown-table th {
+  font-weight: 500;
+  color: var(--p-text-muted-color);
+  text-align: left;
+}
+
+.breakdown-table th,
+.breakdown-table td {
+  padding: 0.3rem 0.5rem;
+  border-bottom: 1px solid var(--p-content-border-color);
+}
+
+.breakdown-table .text-right {
+  text-align: right;
+}
+
+.breakdown-table tfoot td {
+  font-weight: 600;
+  border-bottom: none;
+}

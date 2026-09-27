@@ -6,7 +6,6 @@ import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { TableModule } from 'primeng/table';
 import { TagModule } from 'primeng/tag';
-import { AvatarModule } from 'primeng/avatar';
 import { ChipModule } from 'primeng/chip';
 import { MeterGroupModule, MeterItem } from 'primeng/metergroup';
 import { RatingModule } from 'primeng/rating';
@@ -16,10 +15,9 @@ import { ButtonModule } from 'primeng/button';
 import { TeamStateService } from '../../services/team-state.service';
 import { EspnApiService } from '../../services/espn-api.service';
 import { ImportTeamRequest, Player, Team } from '../../models/team.model';
+import { PlayerAvatarComponent } from '../player-avatar/player-avatar.component';
 import { PlayerDetailDrawerComponent } from '../player-detail-drawer/player-detail-drawer.component';
-import { formatGameTime, matchupStars, statusSeverity } from '../../utils/player-format';
-
-const STARTER_SLOT_ORDER = ['QB', 'RB', 'WR', 'TE', 'FLEX', 'D/ST', 'K'];
+import { formatGameTime, matchupStars, sortStarters, statusSeverity } from '../../utils/player-format';
 
 @Component({
   selector: 'app-team-display',
@@ -30,7 +28,6 @@ const STARTER_SLOT_ORDER = ['QB', 'RB', 'WR', 'TE', 'FLEX', 'D/ST', 'K'];
     RouterLink,
     TableModule,
     TagModule,
-    AvatarModule,
     ChipModule,
     MeterGroupModule,
     RatingModule,
@@ -38,6 +35,7 @@ const STARTER_SLOT_ORDER = ['QB', 'RB', 'WR', 'TE', 'FLEX', 'D/ST', 'K'];
     MessageModule,
     ButtonModule,
     PlayerDetailDrawerComponent,
+    PlayerAvatarComponent,
   ],
   templateUrl: './team-display.component.html',
   styleUrl: './team-display.component.css',
@@ -85,15 +83,14 @@ export class TeamDisplayComponent {
     this.isOwnTeam() ? this.teamState.team() : (this.otherTeamLoad()?.team ?? null),
   );
 
+  // The user's own team links to plain /matchup so the Matchup nav tab lights up.
+  protected readonly matchupLink = computed(() => (this.isOwnTeam() ? '/matchup' : `/matchup/${this.teamId()}`));
+
   protected retry(): void {
     this.reloadCount.update((n) => n + 1);
   }
 
-  protected readonly starters = computed<Player[]>(() =>
-    [...(this.team()?.players ?? [])]
-      .filter((p) => p.starter)
-      .sort((a, b) => STARTER_SLOT_ORDER.indexOf(a.slot) - STARTER_SLOT_ORDER.indexOf(b.slot)),
-  );
+  protected readonly starters = computed<Player[]>(() => sortStarters(this.team()?.players ?? []));
   protected readonly bench = computed<Player[]>(() => (this.team()?.players ?? []).filter((p) => !p.starter));
 
   protected readonly startersProjectedTotal = computed(() =>

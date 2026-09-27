@@ -1,0 +1,144 @@
+:host {
+  display: block;
+}
+
+/* Right-hand sides mirror the left, so each row reads outward from the slot column. */
+.side-right {
+  flex-direction: row-reverse;
+  text-align: right;
+}
+
+.scoreboard {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  border: 1px solid var(--p-content-border-color);
+  border-radius: var(--p-border-radius-lg);
+  overflow: hidden;
+}
+
+.scoreboard-side {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1rem;
+  min-width: 0;
+}
+
+.scoreboard-side + .scoreboard-side {
+  border-left: 1px solid var(--p-content-border-color);
+}
+
+.scoreboard-score {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  margin-inline-start: auto;
+  flex-shrink: 0;
+}
+
+.side-right .scoreboard-score {
+  margin-inline-start: 0;
+  margin-inline-end: auto;
+}
+
+.team-name {
+  font-weight: 600;
+  color: var(--p-text-color);
+}
+
+.team-name:hover {
+  text-decoration: underline;
+}
+
+.versus-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 4.5rem minmax(0, 1fr);
+}
+
+.versus-grid > * {
+  border-bottom: 1px solid var(--p-content-border-color);
+}
+
+.slot-label {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--p-text-muted-color);
+  background: var(--p-content-hover-background);
+}
+
+.player-cell {
+  display: flex;
+  align-items: center;
+  gap: 0.875rem;
+  padding: 0.75rem 1rem;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.player-cell:hover {
+  background: var(--p-content-hover-background);
+}
+
+.player-cell:focus-visible {
+  outline: 2px solid var(--p-primary-400);
+  outline-offset: -2px;
+}
+
+.player-cell-empty {
+  cursor: default;
+  font-size: 0.875rem;
+  color: var(--p-text-muted-color);
+}
+
+.player-cell-empty:hover {
+  background: none;
+}
+
+.total-cell {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  border-bottom: none !important;
+}
+
+.versus-grid > .slot-label:nth-last-child(2) {
+  border-bottom: none;
+}
+
+/* On phones each scoreboard side stacks (logo, name, score) and the slot column narrows. */
+@media (max-width: 639.98px) {
+  .scoreboard-side,
+  .scoreboard-side.side-right {
+    flex-direction: column;
+    text-align: center;
+  }
+
+  .scoreboard-side > div,
+  .scoreboard-side .scoreboard-score {
+    align-items: center !important;
+    margin: 0;
+  }
+
+  .versus-grid {
+    grid-template-columns: minmax(0, 1fr) 2.75rem minmax(0, 1fr);
+  }
+
+  .player-cell,
+  .total-cell {
+    padding: 0.5rem;
+  }
+
+  .slot-label {
+    font-size: 0.75rem;
+  }
+}
+
+:host ::ng-deep .injury-tag .p-tag {
+  font-size: 0.625rem;
+  padding: 0.05rem 0.3rem;
+}

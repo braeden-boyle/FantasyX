@@ -1,0 +1,251 @@
+@if (!teamState.importRequest()) {
+  <div class="max-w-xl mx-auto mt-10 p-4 text-center text-surface-500">
+    No team imported yet. <a routerLink="/import" class="text-primary-600 underline">Go import one</a>.
+  </div>
+} @else if (loading()) {
+  <div class="flex justify-center mt-16">
+    <p-progress-spinner ariaLabel="Loading matchup" />
+  </div>
+} @else if (errorMessage()) {
+  @let message = errorMessage()!;
+  <div class="max-w-xl mx-auto mt-10 p-4 flex flex-col items-start gap-3">
+    <p-message severity="error" [text]="message" class="w-full" />
+    <div class="flex items-center gap-4">
+      <p-button label="Retry" icon="pi pi-refresh" size="small" (onClick)="refresh()" />
+      <a routerLink="/league" class="text-primary-600 underline text-sm">Back to League</a>
+    </div>
+  </div>
+} @else if (matchup()) {
+  @let m = matchup()!;
+  <div class="max-w-6xl mx-auto mt-10 p-4 flex flex-col gap-6">
+    @if (!isOwnMatchup()) {
+      <p-message severity="secondary" icon="pi pi-eye">
+        <span>
+          Viewing {{ m.team.team.name }}'s matchup ·
+          <a routerLink="/league" class="text-primary-600 underline">Back to League</a>
+        </span>
+      </p-message>
+    }
+
+    <div class="flex items-start justify-between gap-4">
+      <div class="flex flex-col gap-2">
+        <h1 class="text-2xl font-semibold">
+          Matchup
+          @if (m.scoringPeriod) {
+            <span class="text-surface-500 font-normal">· Week {{ m.scoringPeriod }}</span>
+          }
+        </h1>
+        @if (m.leagueName) {
+          <p-chip [label]="m.leagueName" icon="pi pi-trophy" class="w-fit" />
+        }
+      </div>
+      <p-button
+        label="Refresh"
+        icon="pi pi-refresh"
+        [text]="true"
+        size="small"
+        [loading]="refreshing()"
+        (onClick)="refresh()"
+      />
+    </div>
+
+    @if (m.opponent) {
+      @let opp = m.opponent;
+      <!-- Scoreboard: the requested team on the left, its opponent mirrored on the right. -->
+      <div class="scoreboard">
+        @for (side of [m.team, opp]; track side.team.teamId; let isRight = $last) {
+          @let other = isRight ? m.team : opp;
+          <div class="scoreboard-side" [class.side-right]="isRight">
+            <app-team-logo [logoUrl]="side.logoUrl" [abbrev]="side.team.abbrev" size="xlarge" />
+            <div class="flex flex-col min-w-0" [class.items-end]="isRight">
+              <a [routerLink]="teamLink(side.team.teamId)" class="team-name truncate">{{ side.team.name }}</a>
+              <span class="text-xs text-surface-500">{{ record(side) }}</span>
+              @if (isLeading(side, other)) {
+                <p-tag severity="success" value="Leading" class="mt-1 w-fit" />
+              }
+            </div>
+            <div class="scoreboard-score" [class.items-start]="isRight">
+              <span class="text-3xl tabular-nums" [class.font-semibold]="isLeading(side, other)">
+                {{ side.points | number: '1.1-1' }}
+              </span>
+              @if (side.projectedPoints !== null) {
+                <span class="text-xs text-surface-500 tabular-nums">Proj {{ side.projectedPoints | number: '1.1-1' }}</span>
+              }
+            </div>
+          </div>
+        }
+      </div>
+
+      <section>
+        <h2 class="text-lg font-medium mb-2">Starters</h2>
+        <div class="versus-grid">
+          @for (row of starterRows(); track $index) {
+            <ng-container *ngTemplateOutlet="playerCell; context: { $implicit: row.left, other: row.right, right: false }" />
+            <div class="slot-label">{{ row.slot }}</div>
+            <ng-container *ngTemplateOutlet="playerCell; context: { $implicit: row.right, other: row.left, right: true }" />
+          }
+          <div class="total-cell">
+            <span class="text-xs sm:text-sm text-surface-500 tabular-nums">Proj {{ startersProjected(m.team) | number: '1.1-1' }}</span>
+            <span class="font-semibold tabular-nums sm:text-lg">{{ startersPoints(m.team) | number: '1.1-1' }}</span>
+          </div>
+          <div class="slot-label font-medium">Total</div>
+          <div class="total-cell side-right">
+            <span class="text-xs sm:text-sm text-surface-500 tabular-nums">Proj {{ startersProjected(opp) | number: '1.1-1' }}</span>
+            <span class="font-semibold tabular-nums sm:text-lg">{{ startersPoints(opp) | number: '1.1-1' }}</span>
+          </div>
+        </div>
+      </section>
+
+      <p-panel header="Bench" [toggleable]="true" [collapsed]="true" toggler="header">
+        <div class="versus-grid">
+          @for (row of benchRows(); track $index) {
+            <ng-container *ngTemplateOutlet="playerCell; context: { $implicit: row.left, other: null, right: false }" />
+            <div class="slot-label">{{ row.slot }}</div>
+            <ng-container *ngTemplateOutlet="playerCell; context: { $implicit: row.right, other: null, right: true }" />
+          }
+        </div>
+      </p-panel>
+    } @else {
+      <div class="flex flex-col items-start gap-2">
+        <p class="text-surface-500">{{ m.team.team.name }} has no matchup this week.</p>
+        <a [routerLink]="teamLink(m.team.team.teamId)" class="text-primary-600 underline text-sm">View roster</a>
+      </div>
+    }
+  </div>
+
+  <!-- One side of a head-to-head row; the right-hand side is mirrored. -->
+  <ng-template #playerCell let-player let-other="other" let-right="right">
+    @if (player) {
+      <div
+        class="player-cell"
+        [class.side-right]="right"
+        role="button"
+        tabindex="0"
+        [attr.aria-label]="'Show scoring for ' + player.fullName"
+        (click)="openPlayer(player)"
+        (keydown.enter)="openPlayer(player)"
+        (keydown.space)="$event.preventDefault(); openPlayer(player)"
+      >
+        <app-player-avatar [player]="player" class="!hidden sm:!inline-flex" />
+        <div class="flex flex-col min-w-0 flex-1" [class.items-end]="right">
+          <div class="flex items-center gap-1.5 min-w-0 max-w-full" [class.flex-row-reverse]="right">
+            <!-- The pro team sits right of the name on both sides; a D/ST's badge already shows it. -->
+            <span class="flex items-baseline gap-1.5 min-w-0">
+              <span class="truncate sm:text-base">{{ player.fullName }}</span>
+              @if (!player.isTeamLogo) {
+                <span class="text-xs sm:text-sm text-surface-500 shrink-0">{{ player.proTeam }}</span>
+              }
+            </span>
+            @if (player.injuryStatus && player.injuryStatus !== 'ACTIVE') {
+              <!-- Abbreviated here (Q, D, IR, ...); the modal shows the full status. -->
+              <p-tag
+                [severity]="statusSeverity(player.injuryStatus)"
+                [value]="shortStatus(player.injuryStatus)"
+                [attr.title]="statusLabel(player.injuryStatus)"
+                [attr.aria-label]="statusLabel(player.injuryStatus)"
+                class="injury-tag shrink-0"
+              />
+            }
+          </div>
+          <span class="text-xs sm:text-sm text-surface-500 truncate max-w-full">
+            {{ opponentLabel(player) }}
+            @if (player.opponent) {
+              <!-- Kickoff is dropped on phones to keep the opponent readable. -->
+              <span class="hidden sm:inline">{{ formatGameTime(player.gameTimeUtc) }}</span>
+            }
+          </span>
+        </div>
+        <div class="flex flex-col shrink-0" [class.items-end]="!right" [class.items-start]="right">
+          <span class="tabular-nums sm:text-lg" [class.font-semibold]="isRowLeader(player, other)">
+            {{ player.points | number: '1.1-1' }}
+          </span>
+          <span class="text-xs sm:text-sm text-surface-500 tabular-nums">{{ player.projectedPoints | number: '1.1-1' }}</span>
+        </div>
+      </div>
+    } @else {
+      <div class="player-cell player-cell-empty" [class.side-right]="right">Empty</div>
+    }
+  </ng-template>
+
+  <p-dialog
+    [visible]="!!selectedPlayer()"
+    (visibleChange)="onDialogVisibleChange($event)"
+    [modal]="true"
+    [dismissableMask]="true"
+    [draggable]="false"
+    [resizable]="false"
+    [style]="{ width: '32rem' }"
+    [breakpoints]="{ '640px': '95vw' }"
+  >
+    <ng-template #header>
+      @if (selectedPlayer(); as p) {
+        <div class="flex items-center gap-3 min-w-0">
+          <app-player-avatar [player]="p" size="large" />
+          <div class="flex flex-col min-w-0">
+            <div class="flex items-center gap-2">
+              <span class="text-lg font-semibold truncate">{{ p.fullName }}</span>
+              @if (p.injuryStatus) {
+                <p-tag [severity]="statusSeverity(p.injuryStatus)" [value]="p.injuryStatus" />
+              }
+            </div>
+            <span class="text-sm text-surface-500">
+              Week {{ m.scoringPeriod }}
+              @if (p.opponent) {
+                {{ opponentLabel(p) }}
+              }
+              scoring
+            </span>
+          </div>
+        </div>
+      }
+    </ng-template>
+
+    @if (breakdownError(); as message) {
+      <p-message severity="error">
+        <div class="flex items-center gap-3">
+          <span>{{ message }}</span>
+          <p-button label="Retry" size="small" [outlined]="true" (onClick)="retryBreakdown()" />
+        </div>
+      </p-message>
+    } @else if (breakdownLoading()) {
+      <div class="flex flex-col gap-2" aria-busy="true">
+        @for (i of [1, 2, 3, 4, 5]; track i) {
+          <p-skeleton height="1.75rem" />
+        }
+      </div>
+    } @else {
+      @let game = breakdownGame();
+      @switch (game?.status) {
+        @case ('Played') {
+          @if (game!.scoringBreakdown) {
+            <app-scoring-breakdown [game]="game!" />
+          } @else {
+            <p class="text-surface-500">
+              {{ game!.points | number: '1.1-1' }} points; ESPN didn't send a breakdown for this game.
+            </p>
+          }
+        }
+        @case ('Upcoming') {
+          <p class="text-surface-500">
+            Hasn't played yet
+            @if (game!.gameTimeUtc) {
+              · kicks off {{ formatGameTime(game!.gameTimeUtc) }}
+            }
+            @if (game!.projectedPoints !== null) {
+              · Proj {{ game!.projectedPoints | number: '1.1-1' }}
+            }
+          </p>
+        }
+        @case ('DidNotPlay') {
+          <p class="text-surface-500">Did not play.</p>
+        }
+        @case ('Bye') {
+          <p class="text-surface-500">Bye week.</p>
+        }
+        @default {
+          <p class="text-surface-500">No game this week.</p>
+        }
+      }
+    }
+  </p-dialog>
+}

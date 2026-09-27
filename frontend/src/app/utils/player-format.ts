@@ -1,4 +1,15 @@
-// Display helpers shared by the roster table and the player detail drawer.
+import { Player } from '../models/team.model';
+
+// Display helpers shared by the roster table, the matchup view and the player detail drawer.
+
+const STARTER_SLOT_ORDER = ['QB', 'RB', 'WR', 'TE', 'FLEX', 'D/ST', 'K'];
+
+// A roster's starters in standard lineup order (QB, RB, WR, TE, FLEX, D/ST, K).
+export function sortStarters(players: Player[]): Player[] {
+  return players
+    .filter((p) => p.starter)
+    .sort((a, b) => STARTER_SLOT_ORDER.indexOf(a.slot) - STARTER_SLOT_ORDER.indexOf(b.slot));
+}
 
 export function statusSeverity(status: string | null): 'success' | 'warn' | 'danger' {
   switch (status?.toUpperCase()) {
@@ -9,6 +20,32 @@ export function statusSeverity(status: string | null): 'success' | 'warn' | 'dan
     default:
       return 'danger';
   }
+}
+
+// ESPN's injury statuses abbreviated the way ESPN's own lineups show them, for tight spaces.
+const STATUS_ABBREVIATIONS: Record<string, string> = {
+  QUESTIONABLE: 'Q',
+  DOUBTFUL: 'D',
+  OUT: 'O',
+  PROBABLE: 'P',
+  INJURY_RESERVE: 'IR',
+  SUSPENSION: 'SSPD',
+  DAY_TO_DAY: 'DTD',
+};
+
+// Unknown statuses fall back to the initials of their words (e.g. "PHYSICALLY_UNABLE" -> "PU").
+export function shortStatus(status: string): string {
+  const key = status.toUpperCase();
+  return STATUS_ABBREVIATIONS[key] ?? key.split(/[_\s]+/).map((word) => word[0]).join('');
+}
+
+// "INJURY_RESERVE" -> "Injury Reserve", for tooltips beside an abbreviated status.
+export function statusLabel(status: string): string {
+  return status
+    .toLowerCase()
+    .split(/[_\s]+/)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
 }
 
 export function formatGameTime(gameTimeUtc: string | null): string | null {

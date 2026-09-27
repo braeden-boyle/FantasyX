@@ -6,6 +6,7 @@ import {
   ImportTeamRequest,
   League,
   LeagueTeamsRequest,
+  MatchupDetail,
   PlayerDetail,
   PlayerDetailRequest,
   Team,
@@ -28,6 +29,10 @@ export class EspnApiService {
 
   getTeam(request: ImportTeamRequest): Observable<Team> {
     return this.http.post<Team>(`${this.baseUrl}/team`, request);
+  }
+
+  getMatchup(request: ImportTeamRequest): Observable<MatchupDetail> {
+    return this.http.post<MatchupDetail>(`${this.baseUrl}/matchup`, request);
   }
 
   getPlayer(request: PlayerDetailRequest): Observable<PlayerDetail> {

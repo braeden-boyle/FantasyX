@@ -34,9 +34,12 @@
             <span class="text-surface-500">({{ t.abbrev }})</span>
           }
         </h1>
-        @if (t.leagueName) {
-          <p-chip [label]="t.leagueName" icon="pi pi-trophy" class="w-fit" />
-        }
+        <div class="flex items-center gap-3">
+          @if (t.leagueName) {
+            <p-chip [label]="t.leagueName" icon="pi pi-trophy" class="w-fit" />
+          }
+          <a [routerLink]="matchupLink()" class="text-primary-600 underline text-sm">View matchup</a>
+        </div>
       </div>
       <p-metergroup [value]="recordMeterValues(t)" [max]="recordMeterMax(t)" labelPosition="start" class="w-64 shrink-0">
         <ng-template #label let-items>
@@ -81,7 +84,7 @@
             <td>{{ player.slot }}</td>
             <td>
               <div class="flex items-center gap-2">
-                <p-avatar [image]="player.headshotUrl" shape="circle" size="xlarge" />
+                <app-player-avatar [player]="player" />
                 <div class="flex flex-col">
                   <span>{{ player.fullName }}</span>
                   <span class="text-xs text-surface-500">{{ player.position }} · {{ player.proTeam }}</span>
@@ -148,7 +151,7 @@
             <td>Bench</td>
             <td>
               <div class="flex items-center gap-2">
-                <p-avatar [image]="player.headshotUrl" shape="circle" size="xlarge" />
+                <app-player-avatar [player]="player" />
                 <div class="flex flex-col">
                   <span>{{ player.fullName }}</span>
                   <span class="text-xs text-surface-500">{{ player.position }} · {{ player.proTeam }}</span>

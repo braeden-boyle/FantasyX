@@ -22,6 +22,7 @@ export class App {
 
   protected readonly tabs = [
     { route: '/team', label: 'My Team', icon: 'pi pi-user' },
+    { route: '/matchup', label: 'Matchup', icon: 'pi pi-bolt' },
     { route: '/league', label: 'League', icon: 'pi pi-trophy' },
   ];
 
@@ -33,7 +34,7 @@ export class App {
     { initialValue: this.router.url },
   );
 
-  // No tab is active while viewing another team (/team/:teamId) or the import page.
+  // No tab is active while viewing another team or its matchup (/team/:teamId, /matchup/:teamId) or the import page.
   protected readonly activeTab = computed(() => this.tabs.find((t) => t.route === this.url())?.route ?? '');
 
   protected navigate(route: string | number | undefined): void {

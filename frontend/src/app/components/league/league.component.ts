@@ -103,6 +103,12 @@ export class LeagueComponent {
     this.router.navigateByUrl(this.teamLink(teamId));
   }
 
+  // The user's own matchup links to plain /matchup so the Matchup nav tab lights up.
+  protected openMatchup(m: Matchup): void {
+    const mine = this.isMine(m.home.teamId) || this.isMine(m.away.teamId);
+    this.router.navigateByUrl(mine ? '/matchup' : `/matchup/${m.home.teamId}`);
+  }
+
   protected record(s: Standing): string {
     return s.ties ? `${s.wins}-${s.losses}-${s.ties}` : `${s.wins}-${s.losses}`;
   }
