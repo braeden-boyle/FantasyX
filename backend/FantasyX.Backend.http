@@ -28,6 +28,15 @@ Content-Type: application/json
   "teamId": 1
 }
 
+### Get every matchup this week (all teams' rosters and scores, plus who plays whom)
+POST {{FantasyX.Backend_HostAddress}}/api/espn/matchups
+Content-Type: application/json
+
+{
+  "leagueId": 123456,
+  "season": 2024
+}
+
 ### Get a player's detail (season summary, weekly game log, and schedule)
 POST {{FantasyX.Backend_HostAddress}}/api/espn/player
 Content-Type: application/json

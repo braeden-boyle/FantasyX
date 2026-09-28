@@ -23,8 +23,9 @@ import { MessageModule } from 'primeng/message';
 import { ButtonModule } from 'primeng/button';
 import { TableModule } from 'primeng/table';
 import { TagModule } from 'primeng/tag';
-import { AvatarModule } from 'primeng/avatar';
 import { RatingModule } from 'primeng/rating';
+import { PlayerAvatarComponent } from '../player-avatar/player-avatar.component';
+import { ScoringBreakdownComponent } from '../scoring-breakdown/scoring-breakdown.component';
 import { PlayerDetailService } from '../../services/player-detail.service';
 import { Player, PlayerDetail, PlayerGame } from '../../models/team.model';
 import { formatGameDate, formatGameTime, matchupStars, statusSeverity } from '../../utils/player-format';
@@ -46,8 +47,9 @@ const NARROW_QUERY = '(max-width: 1023.98px)';
     ButtonModule,
     TableModule,
     TagModule,
-    AvatarModule,
     RatingModule,
+    ScoringBreakdownComponent,
+    PlayerAvatarComponent,
   ],
   templateUrl: './player-detail-drawer.component.html',
   styleUrl: './player-detail-drawer.component.css',

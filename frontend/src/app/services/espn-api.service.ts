@@ -10,6 +10,7 @@ import {
   PlayerDetailRequest,
   Team,
   TeamSummary,
+  WeekMatchups,
 } from '../models/team.model';
 
 @Injectable({ providedIn: 'root' })
@@ -28,6 +29,10 @@ export class EspnApiService {
 
   getTeam(request: ImportTeamRequest): Observable<Team> {
     return this.http.post<Team>(`${this.baseUrl}/team`, request);
+  }
+
+  getWeekMatchups(request: LeagueTeamsRequest): Observable<WeekMatchups> {
+    return this.http.post<WeekMatchups>(`${this.baseUrl}/matchups`, request);
   }
 
   getPlayer(request: PlayerDetailRequest): Observable<PlayerDetail> {

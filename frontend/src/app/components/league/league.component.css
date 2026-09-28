@@ -2,11 +2,24 @@
   display: block;
 }
 
-/* Each side of a matchup is its own clickable row, so the card body drops its padding. */
+/* The whole card opens the matchup view; each side is a row, so the card body drops its padding. */
 .matchup-card {
   display: block;
   overflow: hidden;
   border-radius: var(--p-card-border-radius);
+}
+
+.matchup-card {
+  cursor: pointer;
+}
+
+.matchup-card:hover .matchup-side {
+  background: var(--p-content-hover-background);
+}
+
+.matchup-card:focus-visible {
+  outline: 2px solid var(--p-primary-400);
+  outline-offset: 2px;
 }
 
 .matchup-card-mine {

@@ -63,6 +63,34 @@ export interface League {
   matchups: Matchup[];
 }
 
+// points are totals for the whole matchup period; each player's points are for scoringPeriod only.
+export interface MatchupTeam {
+  team: Team;
+  logoUrl: string | null;
+  points: number;
+  projectedPoints: number | null;
+}
+
+// The current week from POST /api/espn/matchups: every team plus who plays whom. A team missing
+// from matchups has no matchup this period; awayTeamId is null for a bye.
+export interface WeekMatchups {
+  leagueName: string;
+  matchupPeriod: number;
+  scoringPeriod: number;
+  teams: MatchupTeam[];
+  matchups: { homeTeamId: number; awayTeamId: number | null }[];
+}
+
+// One team's matchup, assembled client-side from WeekMatchups. opponent is null when the team
+// has no matchup this period (a bye, or out of the playoffs).
+export interface MatchupDetail {
+  leagueName: string;
+  matchupPeriod: number;
+  scoringPeriod: number;
+  team: MatchupTeam;
+  opponent: MatchupTeam | null;
+}
+
 export interface TeamSummary {
   teamId: number;
   name: string;

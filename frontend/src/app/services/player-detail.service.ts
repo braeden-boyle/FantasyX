@@ -15,6 +15,11 @@ export class PlayerDetailService {
   private readonly cache = new Map<string, PlayerDetail>();
   private cachedFor: ImportTeamRequest | null = null;
 
+  // Drops every cached player, e.g. when the matchup view refreshes its scores.
+  clear(): void {
+    this.cache.clear();
+  }
+
   load(playerId: number, force = false): Observable<PlayerDetail> {
     const request = this.teamState.importRequest();
     if (!request) {

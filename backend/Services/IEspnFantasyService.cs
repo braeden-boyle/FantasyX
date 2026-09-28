@@ -12,5 +12,7 @@ public interface IEspnFantasyService
 
     Task<TeamDto> GetTeamRosterAsync(ImportTeamRequest request, CancellationToken cancellationToken);
 
+    Task<WeekMatchupsDto> GetWeekMatchupsAsync(LeagueTeamsRequest request, CancellationToken cancellationToken);
+
     Task<PlayerDetailDto> GetPlayerDetailAsync(PlayerDetailRequest request, CancellationToken cancellationToken);
 }

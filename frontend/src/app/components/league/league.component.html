@@ -85,11 +85,16 @@
             <p-card
               class="matchup-card"
               [class.matchup-card-mine]="isMine(m.home.teamId) || isMine(m.away.teamId)"
+              tabindex="0"
+              role="link"
+              [attr.aria-label]="'Show matchup: ' + (standing(m.away.teamId)?.name ?? 'Team ' + m.away.teamId) + ' vs ' + (standing(m.home.teamId)?.name ?? 'Team ' + m.home.teamId)"
+              (click)="openMatchup(m)"
+              (keydown.enter)="openMatchup(m)"
+              (keydown.space)="$event.preventDefault(); openMatchup(m)"
             >
               @for (side of [m.away, m.home]; track side.teamId) {
                 @let s = standing(side.teamId);
                 @let opponent = side === m.home ? m.away : m.home;
-                <!-- Not clickable yet: this will open a matchup view (both rosters side by side), not a roster. -->
                 <div class="matchup-side">
                   <app-team-logo [logoUrl]="s?.logoUrl ?? null" [abbrev]="s?.abbrev ?? ''" />
                   <div class="flex flex-col min-w-0 flex-1">
