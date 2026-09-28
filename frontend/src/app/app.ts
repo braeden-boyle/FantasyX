@@ -4,12 +4,13 @@ import { NavigationEnd, Router, RouterOutlet } from '@angular/router';
 import { filter, map } from 'rxjs';
 import { TabsModule } from 'primeng/tabs';
 import { ButtonModule } from 'primeng/button';
+import { ProgressSpinnerModule } from 'primeng/progressspinner';
 import { TeamStateService } from './services/team-state.service';
 
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [RouterOutlet, TabsModule, ButtonModule],
+  imports: [RouterOutlet, TabsModule, ButtonModule, ProgressSpinnerModule],
   templateUrl: './app.html',
   styleUrl: './app.css',
 })
@@ -17,8 +18,11 @@ export class App {
   protected readonly title = 'FantasyX';
   private readonly router = inject(Router);
 
+  private readonly teamState = inject(TeamStateService);
+
   // My Team / League only make sense once a team (and its league context) has been imported.
-  protected readonly hasTeam = inject(TeamStateService).team;
+  protected readonly hasTeam = this.teamState.team;
+  protected readonly restoring = this.teamState.restoring;
 
   protected readonly tabs = [
     { route: '/team', label: 'My Team', icon: 'pi pi-user' },

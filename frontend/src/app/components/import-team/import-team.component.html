@@ -1,4 +1,9 @@
-<div class="max-w-xl mx-auto mt-10 p-4">
+<div class="max-w-xl mx-auto mt-10 p-4 flex flex-col gap-4">
+  @if (teamState.restoreError(); as restoreError) {
+    <p-message severity="warn" icon="pi pi-exclamation-triangle">
+      Couldn't reload your last team: {{ restoreError }}
+    </p-message>
+  }
   <p-panel header="Import your ESPN fantasy team">
     <form [formGroup]="form" class="flex flex-col gap-4">
       <div class="flex gap-4">

@@ -15,6 +15,7 @@
       </p-tabs>
     }
     <p-button
+      [class.invisible]="restoring()"
       class="ml-auto import-button"
       [ariaLabel]="hasTeam() ? 'Change team' : 'Import'"
       [label]="hasTeam() ? 'Change team' : 'Import'"
@@ -26,4 +27,12 @@
   </nav>
 </header>
 
-<router-outlet></router-outlet>
+<!-- Held back while the last team is restored, so pages don't flash "No team imported yet". -->
+@if (restoring()) {
+  <div class="flex flex-col items-center gap-3 mt-16 text-surface-500">
+    <p-progress-spinner ariaLabel="Loading your team" />
+    <span class="text-sm">Loading your team…</span>
+  </div>
+} @else {
+  <router-outlet></router-outlet>
+}
