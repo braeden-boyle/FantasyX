@@ -37,7 +37,7 @@ import { ImportTeamRequest, TeamSummary } from '../../models/team.model';
 export class ImportTeamComponent implements OnInit {
   private readonly fb = inject(FormBuilder);
   private readonly espnApi = inject(EspnApiService);
-  private readonly teamState = inject(TeamStateService);
+  protected readonly teamState = inject(TeamStateService);
   private readonly router = inject(Router);
   private readonly deviceId = inject(DeviceIdService);
   private readonly credentialsApi = inject(CredentialsApiService);
@@ -156,6 +156,7 @@ export class ImportTeamComponent implements OnInit {
 
   protected forgetSavedDetails(): void {
     this.credentialsApi.delete(this.deviceId.getDeviceId()).subscribe(() => {
+      this.teamState.forgetLastImport();
       this.hasSavedDetails.set(false);
       this.form.reset({
         leagueId: null,
