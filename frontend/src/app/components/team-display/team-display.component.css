@@ -11,3 +11,10 @@
   outline: 2px solid var(--p-primary-400);
   outline-offset: -2px;
 }
+
+/* The View Matchup link is styled as a button, so it drops the link underline and matches the
+   league chip's height beside it. */
+.matchup-pill {
+  text-decoration: none;
+  min-height: 2.3rem;
+}
