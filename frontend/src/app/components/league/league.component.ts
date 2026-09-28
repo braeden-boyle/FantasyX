@@ -14,6 +14,7 @@ import { TeamStateService } from '../../services/team-state.service';
 import { EspnApiService } from '../../services/espn-api.service';
 import { TeamLogoComponent } from '../team-logo/team-logo.component';
 import { LeagueTeamsRequest, Matchup, Standing } from '../../models/team.model';
+import { involves, mineFirst } from '../../utils/league-format';
 
 @Component({
   selector: 'app-league',
@@ -74,13 +75,7 @@ export class LeagueComponent {
     () => new Map((this.league()?.standings ?? []).map((s) => [s.teamId, s] as const)),
   );
 
-  // The user's own matchup goes first; the rest keep ESPN's order.
-  protected readonly matchups = computed<Matchup[]>(() => {
-    const myId = this.myTeamId();
-    const all = this.league()?.matchups ?? [];
-    const isMine = (m: Matchup) => m.home.teamId === myId || m.away.teamId === myId;
-    return [...all.filter(isMine), ...all.filter((m) => !isMine(m))];
-  });
+  protected readonly matchups = computed<Matchup[]>(() => mineFirst(this.league()?.matchups ?? [], this.myTeamId()));
 
   protected retry(): void {
     this.reloadCount.update((n) => n + 1);
@@ -105,8 +100,7 @@ export class LeagueComponent {
 
   // The user's own matchup links to plain /matchup so the Matchup nav tab lights up.
   protected openMatchup(m: Matchup): void {
-    const mine = this.isMine(m.home.teamId) || this.isMine(m.away.teamId);
-    this.router.navigateByUrl(mine ? '/matchup' : `/matchup/${m.home.teamId}`);
+    this.router.navigateByUrl(involves(m, this.myTeamId()) ? '/matchup' : `/matchup/${m.home.teamId}`);
   }
 
   protected record(s: Standing): string {

@@ -1,6 +1,6 @@
-import { Component, computed, inject, input, signal } from '@angular/core';
+import { Component, ElementRef, computed, effect, inject, input, signal, viewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { RouterLink } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { toObservable, toSignal } from '@angular/core/rxjs-interop';
 import { catchError, map, of, scan, startWith, switchMap } from 'rxjs';
 import { ButtonModule } from 'primeng/button';
@@ -12,12 +12,13 @@ import { ProgressSpinnerModule } from 'primeng/progressspinner';
 import { SkeletonModule } from 'primeng/skeleton';
 import { TagModule } from 'primeng/tag';
 import { TeamStateService } from '../../services/team-state.service';
-import { EspnApiService } from '../../services/espn-api.service';
+import { WeekMatchupsService } from '../../services/week-matchups.service';
 import { PlayerDetailService } from '../../services/player-detail.service';
 import { TeamLogoComponent } from '../team-logo/team-logo.component';
 import { PlayerAvatarComponent } from '../player-avatar/player-avatar.component';
 import { ScoringBreakdownComponent } from '../scoring-breakdown/scoring-breakdown.component';
-import { ImportTeamRequest, MatchupDetail, MatchupTeam, Player, PlayerDetail } from '../../models/team.model';
+import { Matchup, MatchupDetail, MatchupTeam, Player, PlayerDetail, WeekMatchups } from '../../models/team.model';
+import { involves, mineFirst } from '../../utils/league-format';
 import {
   formatGameTime,
   shortStatus,
@@ -34,9 +35,8 @@ interface PairedRow {
   right: Player | null;
 }
 
-interface MatchupLoad {
-  teamId: number;
-  matchup: MatchupDetail | null;
+interface WeekLoad {
+  week: WeekMatchups | null;
   error: string | null;
   pending: boolean;
 }
@@ -64,8 +64,9 @@ interface MatchupLoad {
 })
 export class MatchupComponent {
   protected readonly teamState = inject(TeamStateService);
-  private readonly espnApi = inject(EspnApiService);
+  private readonly weekMatchupsService = inject(WeekMatchupsService);
   private readonly playerDetail = inject(PlayerDetailService);
+  private readonly router = inject(Router);
 
   // Bound from the /matchup/:teamId route param; absent on plain /matchup, which means the user's own matchup.
   readonly teamId = input<string>();
@@ -74,54 +75,127 @@ export class MatchupComponent {
     const id = this.teamId();
     return id === undefined ? this.teamState.myTeamId() : Number(id);
   });
-  protected readonly isOwnMatchup = computed(() => this.requestedTeamId() === this.teamState.myTeamId());
 
-  // Refetched on every visit and on Refresh, so live scores are never stale.
+  // The whole week is loaded once and cached (WeekMatchupsService), so switching matchups is
+  // instant. Only Refresh refetches it; it also drops cached player breakdowns so they match.
   private readonly reloadCount = signal(0);
-  private readonly matchupRequest = computed<ImportTeamRequest | null>(() => {
+  private forceNextLoad = false;
+  private readonly weekRequest = computed(() => {
     const request = this.teamState.importRequest();
-    const teamId = this.requestedTeamId();
-    if (!request || teamId === null) {
-      return null;
-    }
-    this.reloadCount();
-    return { ...request, teamId };
+    return request ? { request, reload: this.reloadCount() } : null;
   });
-  private readonly matchupLoad = toSignal(
-    toObservable(this.matchupRequest).pipe(
-      switchMap((request) =>
-        request
-          ? this.espnApi.getMatchup(request).pipe(
-              map((matchup): MatchupLoad => ({ teamId: request.teamId, matchup, error: null, pending: false })),
-              catchError((err) =>
-                of<MatchupLoad>({
-                  teamId: request.teamId,
-                  matchup: null,
-                  error: err?.error?.title ?? 'Could not load the matchup.',
-                  pending: false,
-                }),
-              ),
-              startWith<MatchupLoad>({ teamId: request.teamId, matchup: null, error: null, pending: true }),
-            )
-          : of(null),
+  private readonly weekLoad = toSignal(
+    toObservable(this.weekRequest).pipe(
+      switchMap((weekRequest) => {
+        if (!weekRequest) return of(null);
+        const force = this.forceNextLoad;
+        this.forceNextLoad = false;
+        return this.weekMatchupsService.load(force).pipe(
+          map((week): WeekLoad => ({ week, error: null, pending: false })),
+          catchError((err) =>
+            of<WeekLoad>({ week: null, error: err?.error?.title ?? 'Could not load the matchups.', pending: false }),
+          ),
+          startWith<WeekLoad>({ week: null, error: null, pending: true }),
+        );
+      }),
+      // A refresh keeps showing the current scores until the new ones arrive.
+      scan(
+        (previous: WeekLoad | null, current: WeekLoad | null) =>
+          current?.pending && previous?.week ? { ...previous, pending: true } : current,
+        null,
       ),
-      // A refresh of the same matchup keeps showing the current scores until the new ones arrive.
-      scan((previous: MatchupLoad | null, current: MatchupLoad | null) =>
-        current?.pending && previous?.matchup && previous.teamId === current.teamId
-          ? { ...previous, pending: true }
-          : current,
-      null),
     ),
     { initialValue: null },
   );
 
-  protected readonly loading = computed(() => {
-    const load = this.matchupLoad();
-    return this.matchupRequest() !== null && (load === null || (load.pending && !load.matchup));
+  private readonly week = computed(() => this.weekLoad()?.week ?? null);
+  private readonly teamsById = computed(
+    () => new Map((this.week()?.teams ?? []).map((t) => [t.team.teamId, t] as const)),
+  );
+
+  protected readonly matchup = computed<MatchupDetail | null>(() => {
+    const week = this.week();
+    const teamId = this.requestedTeamId();
+    const team = teamId === null ? undefined : this.teamsById().get(teamId);
+    if (!week || !team) return null;
+    const pair = week.matchups.find((p) => p.homeTeamId === teamId || p.awayTeamId === teamId);
+    const opponentId = !pair ? null : pair.homeTeamId === teamId ? pair.awayTeamId : pair.homeTeamId;
+    return {
+      leagueName: week.leagueName,
+      matchupPeriod: week.matchupPeriod,
+      scoringPeriod: week.scoringPeriod,
+      team,
+      opponent: opponentId === null ? null : (this.teamsById().get(opponentId) ?? null),
+    };
   });
-  protected readonly refreshing = computed(() => !!this.matchupLoad()?.pending);
-  protected readonly errorMessage = computed(() => this.matchupLoad()?.error ?? null);
-  protected readonly matchup = computed(() => this.matchupLoad()?.matchup ?? null);
+
+  protected readonly loading = computed(() => {
+    const load = this.weekLoad();
+    return this.weekRequest() !== null && (load === null || (load.pending && !load.week));
+  });
+  protected readonly refreshing = computed(() => !!this.weekLoad()?.pending);
+  protected readonly errorMessage = computed(() => {
+    const error = this.weekLoad()?.error;
+    if (error) return error;
+    return this.week() && !this.matchup() ? `Team ${this.teamId()} isn't in this league.` : null;
+  });
+
+  // The week's head-to-head matchups (byes left out) for the switcher above the scoreboard.
+  protected readonly weekMatchups = computed<Matchup[]>(() => {
+    const side = (teamId: number) => {
+      const t = this.teamsById().get(teamId);
+      return { teamId, points: t?.points ?? 0, projectedPoints: t?.projectedPoints ?? null };
+    };
+    const matchups = (this.week()?.matchups ?? [])
+      .filter((p) => p.awayTeamId !== null)
+      .map((p) => ({ home: side(p.homeTeamId), away: side(p.awayTeamId!) }));
+    return mineFirst(matchups, this.teamState.myTeamId());
+  });
+  protected readonly currentIndex = computed(() =>
+    this.weekMatchups().findIndex((m) => involves(m, this.requestedTeamId())),
+  );
+  protected readonly previousMatchup = computed(() => this.weekMatchups()[this.currentIndex() - 1] ?? null);
+  protected readonly nextMatchup = computed(() => {
+    const index = this.currentIndex();
+    return index < 0 ? null : (this.weekMatchups()[index + 1] ?? null);
+  });
+
+  private readonly switcher = viewChild<ElementRef<HTMLElement>>('switcher');
+
+  constructor() {
+    // Keep the current matchup's chip in view as the user steps through them.
+    effect(() => {
+      const index = this.currentIndex();
+      const switcher = this.switcher()?.nativeElement;
+      if (!switcher || index < 0) return;
+      setTimeout(() =>
+        switcher
+          .querySelector('[aria-current="page"]')
+          ?.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' }),
+      );
+    });
+  }
+
+  protected teamSide(teamId: number): MatchupTeam | undefined {
+    return this.teamsById().get(teamId);
+  }
+
+  protected isCurrentMatchup(m: Matchup): boolean {
+    return involves(m, this.requestedTeamId());
+  }
+
+  protected isMyMatchup(m: Matchup): boolean {
+    return involves(m, this.teamState.myTeamId());
+  }
+
+  // The user's own matchup links to plain /matchup so the Matchup nav tab lights up.
+  protected matchupLink(m: Matchup): string {
+    return this.isMyMatchup(m) ? '/matchup' : `/matchup/${m.home.teamId}`;
+  }
+
+  protected goToMatchup(m: Matchup | null): void {
+    if (m) this.router.navigateByUrl(this.matchupLink(m));
+  }
 
   // Starters lined up slot by slot (RB1 vs RB1, RB2 vs RB2, ...), in standard lineup order.
   protected readonly starterRows = computed<PairedRow[]>(() => {
@@ -159,6 +233,8 @@ export class MatchupComponent {
   protected readonly statusLabel = statusLabel;
 
   protected refresh(): void {
+    this.forceNextLoad = true;
+    this.playerDetail.clear();
     this.reloadCount.update((n) => n + 1);
   }
 
@@ -196,12 +272,12 @@ export class MatchupComponent {
     const player = this.selectedPlayer();
     return player ? { playerId: player.playerId, reload: this.breakdownReloadCount() } : null;
   });
-  // Always refetched so live points match the row that was clicked.
+  // Cached like the matchup itself, so it matches the row until the next Refresh.
   private readonly breakdownLoad = toSignal(
     toObservable(this.breakdownRequest).pipe(
       switchMap((request) =>
         request
-          ? this.playerDetail.load(request.playerId, true).pipe(
+          ? this.playerDetail.load(request.playerId).pipe(
               map((detail): { detail: PlayerDetail | null; error: string | null } => ({ detail, error: null })),
               catchError((err) =>
                 of({ detail: null, error: err?.error?.title ?? 'Could not load the scoring breakdown.' }),

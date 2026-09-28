@@ -6,11 +6,11 @@ import {
   ImportTeamRequest,
   League,
   LeagueTeamsRequest,
-  MatchupDetail,
   PlayerDetail,
   PlayerDetailRequest,
   Team,
   TeamSummary,
+  WeekMatchups,
 } from '../models/team.model';
 
 @Injectable({ providedIn: 'root' })
@@ -31,8 +31,8 @@ export class EspnApiService {
     return this.http.post<Team>(`${this.baseUrl}/team`, request);
   }
 
-  getMatchup(request: ImportTeamRequest): Observable<MatchupDetail> {
-    return this.http.post<MatchupDetail>(`${this.baseUrl}/matchup`, request);
+  getWeekMatchups(request: LeagueTeamsRequest): Observable<WeekMatchups> {
+    return this.http.post<WeekMatchups>(`${this.baseUrl}/matchups`, request);
   }
 
   getPlayer(request: PlayerDetailRequest): Observable<PlayerDetail> {
