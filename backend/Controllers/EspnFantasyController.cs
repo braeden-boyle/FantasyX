@@ -44,12 +44,12 @@ public class EspnFantasyController : ControllerBase
         return Ok(team);
     }
 
-    [HttpPost("matchup")]
-    public async Task<ActionResult<MatchupDetailDto>> GetMatchup(
-        ImportTeamRequest request, CancellationToken cancellationToken)
+    [HttpPost("matchups")]
+    public async Task<ActionResult<WeekMatchupsDto>> GetWeekMatchups(
+        LeagueTeamsRequest request, CancellationToken cancellationToken)
     {
-        var matchup = await _espnFantasyService.GetMatchupAsync(request, cancellationToken);
-        return Ok(matchup);
+        var matchups = await _espnFantasyService.GetWeekMatchupsAsync(request, cancellationToken);
+        return Ok(matchups);
     }
 
     [HttpPost("player")]

@@ -168,9 +168,10 @@ public class EspnFantasyService : IEspnFantasyService
         return ToTeamDto(team, league, week, proSchedule);
     }
 
-    public async Task<MatchupDetailDto> GetMatchupAsync(ImportTeamRequest request, CancellationToken cancellationToken)
+    public async Task<WeekMatchupsDto> GetWeekMatchupsAsync(
+        LeagueTeamsRequest request, CancellationToken cancellationToken)
     {
-        // mRoster returns every team's roster, so both sides of the matchup come from one call.
+        // mRoster returns every team's roster, so the whole week comes from one league call.
         var leagueTask = FetchLeagueAsync<EspnLeagueResponse>(
             request.LeagueId,
             request.Season,
@@ -183,25 +184,27 @@ public class EspnFantasyService : IEspnFantasyService
         await Task.WhenAll(leagueTask, schedulesTask);
 
         var league = await leagueTask;
-        var team = FindTeam(league, request);
-
         var week = league.Status?.LatestScoringPeriod ?? 1;
         var period = league.Status?.CurrentMatchupPeriod ?? 0;
         var proSchedule = ScheduleForWeek(await schedulesTask, week);
 
-        var entry = league.Schedule?.FirstOrDefault(entry =>
-            entry.MatchupPeriodId == period && (entry.Home?.TeamId == team.Id || entry.Away?.TeamId == team.Id));
-        var isHome = entry?.Home?.TeamId == team.Id;
-        var side = isHome ? entry?.Home : entry?.Away;
-        var opponentSide = isHome ? entry?.Away : entry?.Home;
-        var opponent = opponentSide is null ? null : league.Teams?.FirstOrDefault(t => t.Id == opponentSide.TeamId);
+        var entries = league.Schedule?
+            .Where(entry => entry.MatchupPeriodId == period && entry.Home is not null)
+            .ToList() ?? [];
+        var sidesByTeamId = entries
+            .SelectMany(entry => new[] { entry.Home, entry.Away })
+            .OfType<EspnMatchupSide>()
+            .DistinctBy(side => side.TeamId)
+            .ToDictionary(side => side.TeamId);
 
-        return new MatchupDetailDto(
-            league.Settings?.Name ?? string.Empty,
-            period,
-            week,
-            ToMatchupTeamDto(team, side, league, week, proSchedule),
-            opponent is null ? null : ToMatchupTeamDto(opponent, opponentSide, league, week, proSchedule));
+        var teams = league.Teams?
+            .Select(team => ToMatchupTeamDto(team, sidesByTeamId.GetValueOrDefault(team.Id), league, week, proSchedule))
+            .ToList() ?? [];
+        var matchups = entries
+            .Select(entry => new MatchupPairDto(entry.Home!.TeamId, entry.Away?.TeamId))
+            .ToList();
+
+        return new WeekMatchupsDto(league.Settings?.Name ?? string.Empty, period, week, teams, matchups);
     }
 
     private static EspnTeam FindTeam(EspnLeagueResponse league, ImportTeamRequest request) =>
