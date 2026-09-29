@@ -4,11 +4,12 @@ namespace FantasyX.Backend.Models.Dtos;
 // can switch between matchups without another request. A team missing from Matchups has no
 // matchup this period (e.g. eliminated from the playoffs). Points are totals for the whole matchup
 // period, while each player's points are for ScoringPeriod only; the two differ in multi-week
-// playoff rounds.
+// playoff rounds, which ScoringPeriodsInMatchup > 1 flags.
 public record WeekMatchupsDto(
     string LeagueName,
     int MatchupPeriod,
     int ScoringPeriod,
+    int ScoringPeriodsInMatchup,
     IReadOnlyList<MatchupTeamDto> Teams,
     IReadOnlyList<MatchupPairDto> Matchups);
 

@@ -115,6 +115,57 @@
           }
         </div>
 
+        <!-- Each side's chance of winning: grey while close, green from 60% up and red from 40% down. -->
+        @if (showWinChance()) {
+          @let chance = winChance();
+          <section class="win-chance" aria-labelledby="win-chance-heading">
+            <div class="flex items-center justify-center gap-1.5 text-sm text-surface-500">
+              <h2 id="win-chance-heading" class="text-sm font-medium">Win probability</h2>
+              <i
+                class="pi pi-info-circle"
+                tabindex="0"
+                pTooltip="Based on ESPN projections and each player's week-to-week swing this season"
+                tooltipPosition="top"
+                aria-label="Based on ESPN projections and each player's week-to-week swing this season"
+              ></i>
+            </div>
+            @if (chance) {
+              <div
+                class="win-chance-row"
+                role="img"
+                [attr.aria-label]="
+                  m.team.team.name + ' ' + formatChance(chance.team, chance.settled) + ', ' +
+                  opp.team.name + ' ' + formatChance(chance.opponent, chance.settled) + ' to win'
+                "
+              >
+                <span class="win-chance-pct" [class.font-semibold]="chance.team > chance.opponent">
+                  {{ formatChance(chance.team, chance.settled) }}
+                </span>
+                <div class="win-chance-bar">
+                  <div
+                    class="win-chance-fill tone-{{ barTone(chance.team) }}"
+                    [style.flex-grow]="barShare(chance.team, chance.settled)"
+                    [class.hidden]="barShare(chance.team, chance.settled) === 0"
+                  ></div>
+                  <div
+                    class="win-chance-fill tone-{{ barTone(chance.opponent) }} fill-right"
+                    [style.flex-grow]="barShare(chance.opponent, chance.settled)"
+                    [class.hidden]="barShare(chance.opponent, chance.settled) === 0"
+                  ></div>
+                </div>
+                <span class="win-chance-pct" [class.font-semibold]="chance.opponent > chance.team">
+                  {{ formatChance(chance.opponent, chance.settled) }}
+                </span>
+              </div>
+              @if (spreadsFailed()) {
+                <p class="text-xs text-surface-500 text-center">Using position averages for player swings.</p>
+              }
+            } @else {
+              <p-skeleton height="0.75rem" borderRadius="999px" />
+            }
+          </section>
+        }
+
         <section>
           <h2 class="text-lg font-medium mb-2">Starters</h2>
           <div class="versus-grid">

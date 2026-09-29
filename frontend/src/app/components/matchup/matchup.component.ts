@@ -11,14 +11,25 @@ import { PanelModule } from 'primeng/panel';
 import { ProgressSpinnerModule } from 'primeng/progressspinner';
 import { SkeletonModule } from 'primeng/skeleton';
 import { TagModule } from 'primeng/tag';
+import { TooltipModule } from 'primeng/tooltip';
 import { TeamStateService } from '../../services/team-state.service';
 import { WeekMatchupsService } from '../../services/week-matchups.service';
 import { PlayerDetailService } from '../../services/player-detail.service';
+import { PlayerSpreadsService } from '../../services/player-spreads.service';
 import { TeamLogoComponent } from '../team-logo/team-logo.component';
 import { PlayerAvatarComponent } from '../player-avatar/player-avatar.component';
 import { ScoringBreakdownComponent } from '../scoring-breakdown/scoring-breakdown.component';
-import { Matchup, MatchupDetail, MatchupTeam, Player, PlayerDetail, WeekMatchups } from '../../models/team.model';
+import {
+  Matchup,
+  MatchupDetail,
+  MatchupTeam,
+  Player,
+  PlayerDetail,
+  PlayerSpread,
+  WeekMatchups,
+} from '../../models/team.model';
 import { involves, mineFirst } from '../../utils/league-format';
+import { barShare, barTone, formatChance, winProbability } from '../../utils/win-probability';
 import {
   formatGameTime,
   shortStatus,
@@ -33,6 +44,12 @@ interface PairedRow {
   slot: string;
   left: Player | null;
   right: Player | null;
+}
+
+// null spreads with failed set means the request failed and position defaults stand in.
+interface SpreadsLoad {
+  spreads: ReadonlyMap<number, PlayerSpread> | null;
+  failed: boolean;
 }
 
 interface WeekLoad {
@@ -55,6 +72,7 @@ interface WeekLoad {
     ProgressSpinnerModule,
     SkeletonModule,
     TagModule,
+    TooltipModule,
     TeamLogoComponent,
     ScoringBreakdownComponent,
     PlayerAvatarComponent,
@@ -66,6 +84,7 @@ export class MatchupComponent {
   protected readonly teamState = inject(TeamStateService);
   private readonly weekMatchupsService = inject(WeekMatchupsService);
   private readonly playerDetail = inject(PlayerDetailService);
+  private readonly playerSpreads = inject(PlayerSpreadsService);
   private readonly router = inject(Router);
 
   // Bound from the /matchup/:teamId route param; absent on plain /matchup, which means the user's own matchup.
@@ -128,6 +147,45 @@ export class MatchupComponent {
       opponent: opponentId === null ? null : (this.teamsById().get(opponentId) ?? null),
     };
   });
+
+  // Each player's week-to-week swing, loaded once per week (not on Refresh) for the win probability.
+  private readonly spreadsLoad = toSignal(
+    toObservable(this.week).pipe(
+      switchMap((week) =>
+        week
+          ? this.playerSpreads.load(week).pipe(
+              map((spreads): SpreadsLoad => ({ spreads, failed: false })),
+              catchError(() => of<SpreadsLoad>({ spreads: null, failed: true })),
+              startWith(null),
+            )
+          : of(null),
+      ),
+    ),
+    { initialValue: null },
+  );
+  protected readonly spreadsFailed = computed(() => !!this.spreadsLoad()?.failed);
+
+  // When the scores were fetched, so in-progress games are judged against the same moment.
+  private readonly scoresAsOf = computed(() => {
+    this.week();
+    return new Date();
+  });
+
+  // Hidden on byes and in multi-week playoff rounds, where player projections only cover one week
+  // but the matchup totals cover the whole round.
+  protected readonly showWinChance = computed(() => {
+    const m = this.matchup();
+    return !!m?.opponent && (this.week()?.scoringPeriodsInMatchup ?? 1) <= 1;
+  });
+  protected readonly winChance = computed(() => {
+    const m = this.matchup();
+    const load = this.spreadsLoad();
+    if (!this.showWinChance() || !m?.opponent || !load) return null;
+    return winProbability(m.team, m.opponent, load.spreads, this.scoresAsOf());
+  });
+  protected readonly barTone = barTone;
+  protected readonly barShare = barShare;
+  protected readonly formatChance = formatChance;
 
   protected readonly loading = computed(() => {
     const load = this.weekLoad();

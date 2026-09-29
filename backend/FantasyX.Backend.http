@@ -47,4 +47,15 @@ Content-Type: application/json
   "playerId": 3918298
 }
 
+### Get players' week-to-week swing against projection (weeks before scoringPeriod); -16026 is a D/ST
+POST {{FantasyX.Backend_HostAddress}}/api/espn/player-spreads
+Content-Type: application/json
+
+{
+  "leagueId": 123456,
+  "season": 2024,
+  "scoringPeriod": 5,
+  "playerIds": [3918298, 3116406, -16026]
+}
+
 ###

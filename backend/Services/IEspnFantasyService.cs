@@ -15,4 +15,7 @@ public interface IEspnFantasyService
     Task<WeekMatchupsDto> GetWeekMatchupsAsync(LeagueTeamsRequest request, CancellationToken cancellationToken);
 
     Task<PlayerDetailDto> GetPlayerDetailAsync(PlayerDetailRequest request, CancellationToken cancellationToken);
+
+    Task<IReadOnlyList<PlayerSpreadDto>> GetPlayerSpreadsAsync(
+        PlayerSpreadsRequest request, CancellationToken cancellationToken);
 }

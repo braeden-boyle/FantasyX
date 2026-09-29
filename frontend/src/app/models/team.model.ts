@@ -14,6 +14,8 @@ export interface Player {
   opponentIsHome: boolean | null;
   gameTimeUtc: string | null;
   opponentPositionRank: number | null;
+  // Whether this week's game has ended (official stats). False with no game this week.
+  gameFinal: boolean;
 }
 
 export interface Team {
@@ -72,11 +74,13 @@ export interface MatchupTeam {
 }
 
 // The current week from POST /api/espn/matchups: every team plus who plays whom. A team missing
-// from matchups has no matchup this period; awayTeamId is null for a bye.
+// from matchups has no matchup this period; awayTeamId is null for a bye. scoringPeriodsInMatchup
+// is more than 1 in multi-week playoff rounds.
 export interface WeekMatchups {
   leagueName: string;
   matchupPeriod: number;
   scoringPeriod: number;
+  scoringPeriodsInMatchup: number;
   teams: MatchupTeam[];
   matchups: { homeTeamId: number; awayTeamId: number | null }[];
 }
@@ -110,6 +114,18 @@ export interface ImportTeamRequest extends LeagueTeamsRequest {
 
 export interface PlayerDetailRequest extends LeagueTeamsRequest {
   playerId: number;
+}
+
+export interface PlayerSpreadsRequest extends LeagueTeamsRequest {
+  scoringPeriod: number;
+  playerIds: number[];
+}
+
+// meanSquaredError is the mean of (actual - projected)^2 over gamesUsed weeks this season.
+export interface PlayerSpread {
+  playerId: number;
+  gamesUsed: number;
+  meanSquaredError: number;
 }
 
 export type PlayerGameStatus = 'Played' | 'DidNotPlay' | 'Bye' | 'Upcoming';
