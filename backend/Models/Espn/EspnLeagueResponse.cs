@@ -10,7 +10,11 @@ public record EspnLeagueResponse(
     List<EspnScheduleEntry>? Schedule);
 
 // Only populated when the "mSettings" view is requested.
-public record EspnSettings(string? Name);
+public record EspnSettings(string? Name, EspnScheduleSettings? ScheduleSettings);
+
+// Scoring period ids in each matchup period, keyed by matchup period id as a string. A playoff
+// round can span more than one scoring period.
+public record EspnScheduleSettings(Dictionary<string, List<int>>? MatchupPeriods);
 
 // PlayoffSeed doubles as the team's current standing rank within the league. Owners holds member
 // ids (SWIDs) that match EspnMember.Id.

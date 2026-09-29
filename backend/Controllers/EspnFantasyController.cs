@@ -59,4 +59,12 @@ public class EspnFantasyController : ControllerBase
         var player = await _espnFantasyService.GetPlayerDetailAsync(request, cancellationToken);
         return Ok(player);
     }
+
+    [HttpPost("player-spreads")]
+    public async Task<ActionResult<IReadOnlyList<PlayerSpreadDto>>> GetPlayerSpreads(
+        PlayerSpreadsRequest request, CancellationToken cancellationToken)
+    {
+        var spreads = await _espnFantasyService.GetPlayerSpreadsAsync(request, cancellationToken);
+        return Ok(spreads);
+    }
 }

@@ -204,7 +204,13 @@ public class EspnFantasyService : IEspnFantasyService
             .Select(entry => new MatchupPairDto(entry.Home!.TeamId, entry.Away?.TeamId))
             .ToList();
 
-        return new WeekMatchupsDto(league.Settings?.Name ?? string.Empty, period, week, teams, matchups);
+        var scoringPeriodsInMatchup =
+            league.Settings?.ScheduleSettings?.MatchupPeriods?.GetValueOrDefault(period.ToString())?.Count is > 0 and var count
+                ? count
+                : 1;
+
+        return new WeekMatchupsDto(
+            league.Settings?.Name ?? string.Empty, period, week, scoringPeriodsInMatchup, teams, matchups);
     }
 
     private static EspnTeam FindTeam(EspnLeagueResponse league, ImportTeamRequest request) =>
@@ -278,7 +284,8 @@ public class EspnFantasyService : IEspnFantasyService
             game is null ? null : EspnLookups.ProTeamAbbrev(game.OpponentProTeamId),
             game?.IsHome,
             game is null ? null : DateTimeOffset.FromUnixTimeMilliseconds(game.DateMs),
-            game is null ? null : PositionRankFor(positionalRatings, player.DefaultPositionId, game.OpponentProTeamId));
+            game is null ? null : PositionRankFor(positionalRatings, player.DefaultPositionId, game.OpponentProTeamId),
+            game?.Final ?? false);
     }
 
     private static double ProjectedPointsFor(EspnPlayer player, int week) =>
@@ -346,8 +353,10 @@ public class EspnFantasyService : IEspnFantasyService
         var isTeamDefense = EspnLookups.IsDefenseSpecialTeams(player.DefaultPositionId);
 
         var seasonStats = player.Stats?.Where(stat => stat.SeasonId == request.Season).ToList() ?? [];
-        var weeklyActuals = WeeklyStats(seasonStats, statSourceId: 0);
         var weeklyProjections = WeeklyStats(seasonStats, statSourceId: 1);
+        var weeklyActuals = WeeklyStats(seasonStats, statSourceId: 0)
+            .Where(entry => !IsMissedGame(entry.Value, weeklyProjections.GetValueOrDefault(entry.Key)))
+            .ToDictionary();
 
         var teamSchedule = schedules.FirstOrDefault(team => team.Id == player.ProTeamId);
 
@@ -413,6 +422,69 @@ public class EspnFantasyService : IEspnFantasyService
             games);
     }
 
+    public async Task<IReadOnlyList<PlayerSpreadDto>> GetPlayerSpreadsAsync(
+        PlayerSpreadsRequest request, CancellationToken cancellationToken)
+    {
+        var playerIds = request.PlayerIds.Distinct().ToArray();
+        var pastWeeks = Enumerable.Range(1, request.ScoringPeriod - 1).ToArray();
+        if (playerIds.Length == 0 || pastWeeks.Length == 0)
+        {
+            return playerIds.Select(id => new PlayerSpreadDto(id, 0, 0)).ToList();
+        }
+
+        // Same filter as the player card, but for every requested player and only the weeks
+        // already played.
+        var fantasyFilter = JsonSerializer.Serialize(new
+        {
+            players = new
+            {
+                filterIds = new { value = playerIds },
+                filterStatsForScoringPeriodIds = new { value = pastWeeks },
+            },
+        });
+
+        var response = await FetchLeagueAsync<EspnPlayerCardResponse>(
+            request.LeagueId,
+            request.Season,
+            ["kona_playercard"],
+            request.EspnS2,
+            request.Swid,
+            fantasyFilter,
+            cancellationToken);
+
+        var playersById = response.Players?
+            .Select(card => card.Player)
+            .DistinctBy(player => player.Id)
+            .ToDictionary(player => player.Id) ?? [];
+
+        return playerIds
+            .Select(id => playersById.TryGetValue(id, out var player)
+                ? ToPlayerSpreadDto(player, request.Season, request.ScoringPeriod)
+                : new PlayerSpreadDto(id, 0, 0))
+            .ToList();
+    }
+
+    // Only weeks with an actual and a projection above 0 count. ESPN zeroes the projection of a
+    // player ruled out and still sends a 0-point actual, so without that check a missed game reads
+    // as a perfect prediction and makes the player look steadier than they are. A late scratch who
+    // was still projected does count, as a real miss.
+    private static PlayerSpreadDto ToPlayerSpreadDto(EspnPlayer player, int season, int currentWeek)
+    {
+        var seasonStats = player.Stats?.Where(stat => stat.SeasonId == season).ToList() ?? [];
+        var actuals = WeeklyStats(seasonStats, statSourceId: 0);
+        var projections = WeeklyStats(seasonStats, statSourceId: 1);
+
+        var misses = actuals
+            .Where(entry => entry.Key < currentWeek
+                && projections.TryGetValue(entry.Key, out var projection)
+                && projection.AppliedTotal > 0)
+            .Select(entry => (entry.Value.AppliedTotal ?? 0) - (projections[entry.Key].AppliedTotal!.Value))
+            .ToList();
+
+        return new PlayerSpreadDto(
+            player.Id, misses.Count, misses.Count == 0 ? 0 : misses.Average(miss => miss * miss));
+    }
+
     private static PlayerGameDto ToPlayerGameDto(
         int week,
         EspnPlayer player,
@@ -472,13 +544,19 @@ public class EspnFantasyService : IEspnFantasyService
             actual?.AppliedStats is { } appliedStats ? EspnScoringStats.Breakdown(appliedStats, actual.Stats) : null);
     }
 
+    // ESPN sends a week's actual row even when the player didn't play: 0 points, every stat 0, and
+    // a projection zeroed once they were ruled out. Treated as not played. (A player projected at 0
+    // who played and scored 0 looks the same, and loses nothing by it.)
+    private static bool IsMissedGame(EspnPlayerStat actual, EspnPlayerStat? projection) =>
+        (actual.AppliedTotal ?? 0) == 0 && (projection?.AppliedTotal ?? 0) == 0;
+
     private static Dictionary<int, EspnPlayerStat> WeeklyStats(IEnumerable<EspnPlayerStat> seasonStats, int statSourceId) =>
         seasonStats
             .Where(stat => stat.StatSourceId == statSourceId && stat.StatSplitTypeId == 1 && stat.ScoringPeriodId > 0)
             .GroupBy(stat => stat.ScoringPeriodId!.Value)
             .ToDictionary(group => group.Key, group => group.First());
 
-    private sealed record EspnScheduledGame(int OpponentProTeamId, bool IsHome, long DateMs);
+    private sealed record EspnScheduledGame(int OpponentProTeamId, bool IsHome, long DateMs, bool Final);
 
     private static IReadOnlyDictionary<int, EspnScheduledGame> ScheduleForWeek(
         IReadOnlyList<EspnProTeamScheduleEntry> schedules, int week)
@@ -498,7 +576,7 @@ public class EspnFantasyService : IEspnFantasyService
 
             var isHome = team.Id == game.HomeProTeamId;
             var opponentId = isHome ? game.AwayProTeamId : game.HomeProTeamId;
-            result[team.Id] = new EspnScheduledGame(opponentId, isHome, game.Date);
+            result[team.Id] = new EspnScheduledGame(opponentId, isHome, game.Date, game.StatsOfficial == true);
         }
 
         return result;

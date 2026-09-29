@@ -3,7 +3,7 @@ Custom fantasy football dashboard; import your team, get insights, news, and mor
 
 ## Status
 
-v1 scope: import a team from ESPN (public or private league) and display its roster. Optional per-device credential persistence (see below); no accounts, no insights yet
+Import a team from ESPN (public or private league) and browse its roster, player game logs, the league standings and this week's head-to-head matchups. The matchup view shows each side's live win probability, the first insights feature. Optional per-device credential persistence (see below); no accounts.
 
 ## Structure
 
@@ -28,6 +28,8 @@ npm start
 ```
 
 Runs on `http://localhost:4200` and expects the backend at `http://localhost:8080` (see `src/environments/environment.ts`).
+
+Unit tests (Vitest, plain TypeScript utils only) run with `npm test`.
 
 ### Private ESPN leagues
 

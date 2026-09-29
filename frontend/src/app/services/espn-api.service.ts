@@ -8,6 +8,8 @@ import {
   LeagueTeamsRequest,
   PlayerDetail,
   PlayerDetailRequest,
+  PlayerSpread,
+  PlayerSpreadsRequest,
   Team,
   TeamSummary,
   WeekMatchups,
@@ -37,5 +39,9 @@ export class EspnApiService {
 
   getPlayer(request: PlayerDetailRequest): Observable<PlayerDetail> {
     return this.http.post<PlayerDetail>(`${this.baseUrl}/player`, request);
+  }
+
+  getPlayerSpreads(request: PlayerSpreadsRequest): Observable<PlayerSpread[]> {
+    return this.http.post<PlayerSpread[]>(`${this.baseUrl}/player-spreads`, request);
   }
 }

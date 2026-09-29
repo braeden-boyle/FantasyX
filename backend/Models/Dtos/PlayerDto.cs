@@ -15,4 +15,5 @@ public record PlayerDto(
     string? Opponent,
     bool? OpponentIsHome,
     DateTimeOffset? GameTimeUtc,
-    int? OpponentPositionRank);
+    int? OpponentPositionRank,
+    bool GameFinal);

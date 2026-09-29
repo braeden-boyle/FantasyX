@@ -108,6 +108,62 @@
   text-decoration: underline;
 }
 
+/* Win probability: a two-sided bar, the requested team's share on the left. */
+.win-chance {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.win-chance-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.win-chance-pct {
+  flex: 0 0 3.75rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.win-chance-row .win-chance-pct:last-child {
+  text-align: right;
+}
+
+/* Two pills side by side, each rounded at the split as well as the ends. */
+.win-chance-bar {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  height: 0.75rem;
+  gap: 3px;
+}
+
+/* min-width keeps a near-0% side a full circle rather than a squashed sliver. */
+.win-chance-fill {
+  flex-basis: 0;
+  min-width: 0.75rem;
+  border-radius: 999px;
+  transition: flex-grow 0.4s ease;
+}
+
+/* Neutral shades follow the theme's muted text colour, so they suit light and dark mode alike. */
+.win-chance-fill.tone-neutral {
+  background: var(--p-text-muted-color);
+}
+
+.win-chance-fill.tone-neutral.fill-right {
+  background: color-mix(in srgb, var(--p-text-muted-color) 45%, transparent);
+}
+
+.win-chance-fill.tone-winning {
+  background: var(--p-green-500);
+}
+
+.win-chance-fill.tone-losing {
+  background: var(--p-red-500);
+}
+
 .versus-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 4.5rem minmax(0, 1fr);
