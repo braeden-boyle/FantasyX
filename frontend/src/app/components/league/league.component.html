@@ -73,12 +73,15 @@
     </section>
 
     <section>
-      <h2 class="text-lg font-medium mb-2">
-        Matchups
-        @if (l.currentMatchupPeriod) {
-          <span class="text-surface-500 font-normal">· Week {{ l.currentMatchupPeriod }}</span>
-        }
-      </h2>
+      <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
+        <h2 class="text-lg font-medium">
+          Matchups
+          @if (l.currentMatchupPeriod) {
+            <span class="text-surface-500 font-normal">· Week {{ l.currentMatchupPeriod }}</span>
+          }
+        </h2>
+        <app-projection-source />
+      </div>
       @if (matchups().length) {
         <div class="flex flex-col gap-3">
           @for (m of matchups(); track m.home.teamId) {
@@ -109,9 +112,9 @@
                     <span class="text-lg tabular-nums" [class.font-semibold]="side.points > opponent.points">
                       {{ side.points | number: '1.1-1' }}
                     </span>
-                    @if (side.projectedPoints !== null) {
+                    @if (teamProjection(side); as projected) {
                       <span class="text-xs text-surface-500 tabular-nums">
-                        Proj {{ side.projectedPoints | number: '1.1-1' }}
+                        Proj {{ projected | number: '1.1-1' }}
                       </span>
                     }
                   </div>

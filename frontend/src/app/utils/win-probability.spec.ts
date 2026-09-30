@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { MatchupTeam, Player, PlayerSpread } from '../models/team.model';
+import { MatchupTeam, Player } from '../models/team.model';
 import {
   GAME_LENGTH_MS,
   POSITION_DEFAULT_SPREAD,
   barShare,
   barTone,
+  espnProjection,
   formatChance,
   roundPercent,
   normalCdf,
@@ -91,11 +92,11 @@ describe('remainingFraction', () => {
 describe('playerSpread', () => {
   it('is the position default with no history', () => {
     expect(playerSpread('QB')).toBe(POSITION_DEFAULT_SPREAD['QB']);
-    expect(playerSpread('K', { playerId: 1, gamesUsed: 0, meanSquaredError: 0 })).toBe(POSITION_DEFAULT_SPREAD['K']);
+    expect(playerSpread('K', [])).toBe(POSITION_DEFAULT_SPREAD['K']);
   });
 
   it('moves toward the player history as games accumulate', () => {
-    const history = (gamesUsed: number): PlayerSpread => ({ playerId: 1, gamesUsed, meanSquaredError: 144 });
+    const history = (games: number) => Array.from({ length: games }, (_, i) => (i % 2 ? 12 : -12));
     const few = playerSpread('WR', history(1));
     const many = playerSpread('WR', history(40));
     expect(few).toBeGreaterThan(POSITION_DEFAULT_SPREAD['WR']);
@@ -107,19 +108,19 @@ describe('playerSpread', () => {
 describe('winProbability', () => {
   it('is 100/0 when every game is final', () => {
     const done = [player({ gameFinal: true })];
-    const result = winProbability(side(1, 110, done), side(2, 90, done), null, BEFORE_KICKOFF);
+    const result = winProbability(side(1, 110, done), side(2, 90, done), espnProjection, null, BEFORE_KICKOFF);
     expect(result).toEqual({ team: 1, opponent: 0, settled: true });
   });
 
   it('is 50/50 on a finished tie', () => {
     const done = [player({ gameFinal: true })];
-    const result = winProbability(side(1, 95, done), side(2, 95, done), null, BEFORE_KICKOFF);
+    const result = winProbability(side(1, 95, done), side(2, 95, done), espnProjection, null, BEFORE_KICKOFF);
     expect(result).toEqual({ team: 0.5, opponent: 0.5, settled: true });
   });
 
   it('is 50/50 for identical teams before kickoff', () => {
     const lineup = [player(), player({ playerId: 2, position: 'RB' })];
-    const result = winProbability(side(1, 0, lineup), side(2, 0, lineup), null, BEFORE_KICKOFF);
+    const result = winProbability(side(1, 0, lineup), side(2, 0, lineup), espnProjection, null, BEFORE_KICKOFF);
     expect(result.team).toBeCloseTo(0.5, 6);
   });
 
@@ -127,6 +128,7 @@ describe('winProbability', () => {
     const result = winProbability(
       side(1, 0, [player({ projectedPoints: 25 })]),
       side(2, 0, [player({ projectedPoints: 10 })]),
+      espnProjection,
       null,
       BEFORE_KICKOFF,
     );
@@ -138,6 +140,7 @@ describe('winProbability', () => {
     const result = winProbability(
       side(1, 120, [player({ gameFinal: true })]),
       side(2, 80, [player({ position: 'K', projectedPoints: 8 })]),
+      espnProjection,
       null,
       BEFORE_KICKOFF,
     );
@@ -151,15 +154,15 @@ describe('winProbability', () => {
       player({ playerId: 2, starter: false, projectedPoints: 40 }),
       player({ playerId: 3, opponent: null, gameTimeUtc: null, projectedPoints: 40 }),
     ];
-    const a = winProbability(side(1, 0, base), side(2, 0, base), null, BEFORE_KICKOFF);
-    const b = winProbability(side(1, 0, withExtras), side(2, 0, base), null, BEFORE_KICKOFF);
+    const a = winProbability(side(1, 0, base), side(2, 0, base), espnProjection, null, BEFORE_KICKOFF);
+    const b = winProbability(side(1, 0, withExtras), side(2, 0, base), espnProjection, null, BEFORE_KICKOFF);
     expect(b.team).toBeCloseTo(a.team, 10);
   });
 
   it('adds no uncertainty for a starter ruled out (projected at 0)', () => {
     const lineup = [player({ gameFinal: true })];
     const ruledOut = [player({ gameFinal: true }), player({ playerId: 2, projectedPoints: 0 })];
-    const result = winProbability(side(1, 90, lineup), side(2, 80, ruledOut), null, BEFORE_KICKOFF);
+    const result = winProbability(side(1, 90, lineup), side(2, 80, ruledOut), espnProjection, null, BEFORE_KICKOFF);
     // Certain, but not settled: the ruled-out starter's game hasn't been played.
     expect(result).toEqual({ team: 1, opponent: 0, settled: false });
   });
@@ -167,9 +170,9 @@ describe('winProbability', () => {
   it('uses a player spread when one is given', () => {
     const lineup = [player({ projectedPoints: 20 })];
     const opp = [player({ projectedPoints: 10 })];
-    const wild = new Map([[1, { playerId: 1, gamesUsed: 40, meanSquaredError: 900 }]]);
-    const steady = winProbability(side(1, 0, lineup), side(2, 0, opp), null, BEFORE_KICKOFF);
-    const swingy = winProbability(side(1, 0, lineup), side(2, 0, opp), wild, BEFORE_KICKOFF);
+    const wild = new Map([[1, Array.from({ length: 40 }, (_, i) => (i % 2 ? 30 : -30))]]);
+    const steady = winProbability(side(1, 0, lineup), side(2, 0, opp), espnProjection, null, BEFORE_KICKOFF);
+    const swingy = winProbability(side(1, 0, lineup), side(2, 0, opp), espnProjection, (id) => wild.get(id), BEFORE_KICKOFF);
     expect(swingy.team).toBeLessThan(steady.team);
   });
 });
@@ -225,6 +228,7 @@ describe('formatChance and barShare', () => {
     const lead = winProbability(
       side(1, 150, done),
       side(2, 40, [player({ gameFinal: true }), player({ playerId: 2, position: 'K', projectedPoints: 8 })]),
+      espnProjection,
       null,
       BEFORE_KICKOFF,
     );
@@ -232,7 +236,7 @@ describe('formatChance and barShare', () => {
     expect(formatChance(lead.team, lead.settled)).toBe('>99.9%');
     // Bench players and players with no game this week don't hold it open.
     const withBench = [player({ gameFinal: true }), player({ playerId: 3, starter: false })];
-    expect(winProbability(side(1, 90, withBench), side(2, 80, done), null, BEFORE_KICKOFF).settled).toBe(true);
+    expect(winProbability(side(1, 90, withBench), side(2, 80, done), espnProjection, null, BEFORE_KICKOFF).settled).toBe(true);
   });
 });
 
@@ -245,5 +249,22 @@ describe('roundPercent', () => {
     for (let p = 0; p <= 1; p += 0.00005) {
       expect(Math.round((roundPercent(p) + roundPercent(1 - p)) * 10)).toBe(1000);
     }
+  });
+});
+
+describe('projection source', () => {
+  it('uses the projection it is given for expected points', () => {
+    const lineup = [player({ projectedPoints: 10 })];
+    const boosted = (p: Player) => p.projectedPoints + 15;
+    const espn = winProbability(side(1, 0, lineup), side(2, 0, lineup), espnProjection, null, BEFORE_KICKOFF);
+    const mine = winProbability(
+      side(1, 0, lineup),
+      side(2, 0, [player({ playerId: 2, projectedPoints: 10 })]),
+      (p) => (p.playerId === 1 ? boosted(p) : p.projectedPoints),
+      null,
+      BEFORE_KICKOFF,
+    );
+    expect(espn.team).toBeCloseTo(0.5, 6);
+    expect(mine.team).toBeGreaterThan(0.5);
   });
 });

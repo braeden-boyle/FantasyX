@@ -96,9 +96,11 @@
           </div>
           <div class="stat-tile">
             <span class="stat-label">Rest of season proj</span>
-            <span class="stat-value">{{ d.summary.restOfSeasonProjection | number: '1.0-0' }}</span>
+            <span class="stat-value">{{ (restOfSeasonProjection() | number: '1.0-0') ?? '—' }}</span>
           </div>
         </div>
+
+        <app-projection-source class="self-start" />
 
         <div class="h-64">
           <p-chart
@@ -139,7 +141,7 @@
                       </div>
                     }
                   </td>
-                  <td class="!text-right">{{ game.projectedPoints | number: '1.1-1' }}</td>
+                  <td class="!text-right">{{ (gameProjection(game) | number: '1.1-1') ?? '—' }}</td>
                   <td class="!text-right">—</td>
                   <td [attr.colspan]="statColumns().length">
                     @if (game.opponentPositionRank) {
@@ -149,11 +151,11 @@
                 }
                 @default {
                   <td class="whitespace-nowrap">{{ game.opponent ? opponentLabel(game) : '—' }}</td>
-                  <td class="!text-right">{{ game.projectedPoints | number: '1.1-1' }}</td>
+                  <td class="!text-right">{{ (gameProjection(game) | number: '1.1-1') ?? '—' }}</td>
                   <td
                     class="!text-right font-medium"
-                    [class.text-green-600]="(game.points ?? 0) > (game.projectedPoints ?? 0)"
-                    [class.text-red-600]="(game.points ?? 0) < (game.projectedPoints ?? 0)"
+                    [class.text-green-600]="(game.points ?? 0) > (gameProjection(game) ?? 0)"
+                    [class.text-red-600]="(game.points ?? 0) < (gameProjection(game) ?? 0)"
                   >
                     @if (game.scoringBreakdown) {
                       <button

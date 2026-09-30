@@ -14,9 +14,11 @@ import { MessageModule } from 'primeng/message';
 import { ButtonModule } from 'primeng/button';
 import { TeamStateService } from '../../services/team-state.service';
 import { EspnApiService } from '../../services/espn-api.service';
+import { ProjectionsService } from '../../services/projections.service';
 import { ImportTeamRequest, Player, Team } from '../../models/team.model';
 import { PlayerAvatarComponent } from '../player-avatar/player-avatar.component';
 import { PlayerDetailDrawerComponent } from '../player-detail-drawer/player-detail-drawer.component';
+import { ProjectionSourceComponent } from '../projection-source/projection-source.component';
 import { formatGameTime, matchupStars, sortStarters, statusSeverity } from '../../utils/player-format';
 
 @Component({
@@ -36,6 +38,7 @@ import { formatGameTime, matchupStars, sortStarters, statusSeverity } from '../.
     ButtonModule,
     PlayerDetailDrawerComponent,
     PlayerAvatarComponent,
+    ProjectionSourceComponent,
   ],
   templateUrl: './team-display.component.html',
   styleUrl: './team-display.component.css',
@@ -43,6 +46,7 @@ import { formatGameTime, matchupStars, sortStarters, statusSeverity } from '../.
 export class TeamDisplayComponent {
   protected readonly teamState = inject(TeamStateService);
   private readonly espnApi = inject(EspnApiService);
+  protected readonly projections = inject(ProjectionsService);
 
   // Bound from the /team/:teamId route param; absent on plain /team, which means the user's own team.
   readonly teamId = input<string>();
@@ -93,8 +97,12 @@ export class TeamDisplayComponent {
   protected readonly starters = computed<Player[]>(() => sortStarters(this.team()?.players ?? []));
   protected readonly bench = computed<Player[]>(() => (this.team()?.players ?? []).filter((p) => !p.starter));
 
+  // Null while FantasyX projections are loading.
   protected readonly startersProjectedTotal = computed(() =>
-    this.starters().reduce((sum, p) => sum + p.projectedPoints, 0),
+    this.starters().reduce<number | null>((sum, p) => {
+      const projected = this.projections.projected(p);
+      return sum === null || projected === null ? null : sum + projected;
+    }, 0),
   );
   protected readonly startersPointsTotal = computed(() => this.starters().reduce((sum, p) => sum + p.points, 0));
 

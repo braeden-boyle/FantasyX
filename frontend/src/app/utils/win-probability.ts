@@ -1,13 +1,14 @@
-import { MatchupTeam, Player, PlayerSpread } from '../models/team.model';
+import { MatchupTeam, Player } from '../models/team.model';
 
 // Each side's chance of winning a matchup, from a normal approximation of the final margin:
-//   expected = points so far + each starter's projection still to be scored
+//   expected = points so far + each starter's projection still to be scored (ESPN's or FantasyX's,
+//              whichever the app is showing)
 //   variance = sum over starters of (fraction of their game left) x (their swing)^2, leaving out
 //              starters projected at 0 (ESPN zeroes the projection of a player ruled out)
-// A starter's swing is how far their weekly points have landed from ESPN's projection this season,
-// pulled toward a position default while they have few games.
+// A starter's swing is how far their weekly points have landed from the same projection source this
+// season, pulled toward a position default while they have few games.
 
-// Typical miss between a player's weekly points and ESPN's projection, by position. Placeholders
+// Typical miss between a player's weekly points and their projection, by position. Placeholders
 // to be tuned against a live league (see docs/PLAN.md, v1.6).
 export const POSITION_DEFAULT_SPREAD: Readonly<Record<string, number>> = {
   QB: 7.5,
@@ -41,11 +42,20 @@ export interface WinProbability {
 
 export type BarTone = 'neutral' | 'winning' | 'losing';
 
-export function playerSpread(position: string, stats?: PlayerSpread | null): number {
+// A player's projection for this week, from whichever source the app is showing.
+export type ProjectionOf = (player: Player) => number;
+// A player's misses (actual - projection) this season against that same source, if known.
+export type ResidualsOf = (playerId: number) => readonly number[] | undefined;
+
+export const espnProjection: ProjectionOf = (player) => player.projectedPoints;
+
+// The root mean square of the player's misses, shrunk toward the position default:
+//   spread^2 = (sum of misses^2 + k x default^2) / (n + k)
+export function playerSpread(position: string, misses?: readonly number[] | null): number {
   const fallback = POSITION_DEFAULT_SPREAD[position] ?? UNKNOWN_POSITION_SPREAD;
-  const n = stats?.gamesUsed ?? 0;
-  const mse = stats?.meanSquaredError ?? 0;
-  return Math.sqrt((n * mse + SHRINKAGE_GAMES * fallback ** 2) / (n + SHRINKAGE_GAMES));
+  const n = misses?.length ?? 0;
+  const squares = (misses ?? []).reduce((sum, miss) => sum + miss * miss, 0);
+  return Math.sqrt((squares + SHRINKAGE_GAMES * fallback ** 2) / (n + SHRINKAGE_GAMES));
 }
 
 // Whether the player has nothing left to play this week: their game is final, or they have none.
@@ -62,30 +72,44 @@ export function remainingFraction(player: Player, now: Date): number {
   return Math.min(1, Math.max(0, 1 - elapsed / GAME_LENGTH_MS));
 }
 
-// Pass null spreads to use position defaults for everyone (e.g. when they failed to load).
+export interface Outlook {
+  expected: number;
+  variance: number;
+}
+
+// A side's expected final score (points so far plus what its starters have left) and its variance.
+// Pass null residuals to use position defaults for everyone (e.g. when they failed to load).
+export function teamOutlook(
+  side: MatchupTeam,
+  projectionOf: ProjectionOf,
+  residualsOf: ResidualsOf | null,
+  now: Date,
+): Outlook {
+  return side.team.players
+    .filter((p) => p.starter)
+    .reduce(
+      (acc, p) => {
+        const projected = projectionOf(p);
+        if (projected <= 0) return acc;
+        const left = remainingFraction(p, now);
+        return {
+          expected: acc.expected + projected * left,
+          variance: acc.variance + left * playerSpread(p.position, residualsOf?.(p.playerId)) ** 2,
+        };
+      },
+      { expected: side.points, variance: 0 },
+    );
+}
+
 export function winProbability(
   team: MatchupTeam,
   opponent: MatchupTeam,
-  spreads: ReadonlyMap<number, PlayerSpread> | null,
+  projectionOf: ProjectionOf,
+  residualsOf: ResidualsOf | null,
   now: Date,
 ): WinProbability {
-  const outlook = (side: MatchupTeam) =>
-    side.team.players
-      .filter((p) => p.starter)
-      .reduce(
-        (acc, p) => {
-          if (p.projectedPoints <= 0) return acc;
-          const left = remainingFraction(p, now);
-          return {
-            expected: acc.expected + p.projectedPoints * left,
-            variance: acc.variance + left * playerSpread(p.position, spreads?.get(p.playerId)) ** 2,
-          };
-        },
-        { expected: side.points, variance: 0 },
-      );
-
-  const mine = outlook(team);
-  const theirs = outlook(opponent);
+  const mine = teamOutlook(team, projectionOf, residualsOf, now);
+  const theirs = teamOutlook(opponent, projectionOf, residualsOf, now);
   const margin = mine.expected - theirs.expected;
   const variance = mine.variance + theirs.variance;
 

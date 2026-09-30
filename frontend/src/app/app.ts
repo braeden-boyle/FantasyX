@@ -6,11 +6,12 @@ import { TabsModule } from 'primeng/tabs';
 import { ButtonModule } from 'primeng/button';
 import { ProgressSpinnerModule } from 'primeng/progressspinner';
 import { TeamStateService } from './services/team-state.service';
+import { SettingsMenuComponent } from './components/settings-menu/settings-menu.component';
 
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [RouterOutlet, TabsModule, ButtonModule, ProgressSpinnerModule],
+  imports: [RouterOutlet, TabsModule, ButtonModule, ProgressSpinnerModule, SettingsMenuComponent],
   templateUrl: './app.html',
   styleUrl: './app.css',
 })
