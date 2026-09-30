@@ -116,16 +116,24 @@ export interface PlayerDetailRequest extends LeagueTeamsRequest {
   playerId: number;
 }
 
-export interface PlayerSpreadsRequest extends LeagueTeamsRequest {
+export interface PlayerHistoryRequest extends LeagueTeamsRequest {
   scoringPeriod: number;
   playerIds: number[];
 }
 
-// meanSquaredError is the mean of (actual - projected)^2 over gamesUsed weeks this season.
-export interface PlayerSpread {
+// One week a player played while projected above 0. opponentPositionRank is the opponent's current
+// rank against the player's position (ESPN doesn't expose the rank as it stood that week).
+export interface HistoryWeek {
+  week: number;
+  actual: number;
+  projected: number;
+  opponentPositionRank: number | null;
+}
+
+// A player's weeks before the requested scoring period; empty with none.
+export interface PlayerHistory {
   playerId: number;
-  gamesUsed: number;
-  meanSquaredError: number;
+  weeks: HistoryWeek[];
 }
 
 export type PlayerGameStatus = 'Played' | 'DidNotPlay' | 'Bye' | 'Upcoming';

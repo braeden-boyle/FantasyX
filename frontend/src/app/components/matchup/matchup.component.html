@@ -107,8 +107,8 @@
                 <span class="text-3xl tabular-nums" [class.font-semibold]="isLeading(side, other)">
                   {{ side.points | number: '1.1-1' }}
                 </span>
-                @if (side.projectedPoints !== null) {
-                  <span class="text-xs text-surface-500 tabular-nums">Proj {{ side.projectedPoints | number: '1.1-1' }}</span>
+                @if (teamProjection(side); as projected) {
+                  <span class="text-xs text-surface-500 tabular-nums">Proj {{ projected | number: '1.1-1' }}</span>
                 }
               </div>
             </div>
@@ -124,9 +124,9 @@
               <i
                 class="pi pi-info-circle"
                 tabindex="0"
-                pTooltip="Based on ESPN projections and each player's week-to-week swing this season"
+                [pTooltip]="winChanceBasis()"
                 tooltipPosition="top"
-                aria-label="Based on ESPN projections and each player's week-to-week swing this season"
+                [attr.aria-label]="winChanceBasis()"
               ></i>
             </div>
             @if (chance) {
@@ -167,7 +167,10 @@
         }
 
         <section>
-          <h2 class="text-lg font-medium mb-2">Starters</h2>
+          <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
+            <h2 class="text-lg font-medium">Starters</h2>
+            <app-projection-source />
+          </div>
           <div class="versus-grid">
             @for (row of starterRows(); track $index) {
               <ng-container *ngTemplateOutlet="playerCell; context: { $implicit: row.left, other: row.right, right: false }" />
@@ -175,12 +178,12 @@
               <ng-container *ngTemplateOutlet="playerCell; context: { $implicit: row.right, other: row.left, right: true }" />
             }
             <div class="total-cell">
-              <span class="text-xs sm:text-sm text-surface-500 tabular-nums">Proj {{ startersProjected(m.team) | number: '1.1-1' }}</span>
+              <span class="text-xs sm:text-sm text-surface-500 tabular-nums">Proj {{ (startersProjected(m.team) | number: '1.1-1') ?? '—' }}</span>
               <span class="font-semibold tabular-nums sm:text-lg">{{ startersPoints(m.team) | number: '1.1-1' }}</span>
             </div>
             <div class="slot-label font-medium">Total</div>
             <div class="total-cell side-right">
-              <span class="text-xs sm:text-sm text-surface-500 tabular-nums">Proj {{ startersProjected(opp) | number: '1.1-1' }}</span>
+              <span class="text-xs sm:text-sm text-surface-500 tabular-nums">Proj {{ (startersProjected(opp) | number: '1.1-1') ?? '—' }}</span>
               <span class="font-semibold tabular-nums sm:text-lg">{{ startersPoints(opp) | number: '1.1-1' }}</span>
             </div>
           </div>
@@ -250,7 +253,7 @@
           <span class="tabular-nums sm:text-lg" [class.font-semibold]="isRowLeader(player, other)">
             {{ player.points | number: '1.1-1' }}
           </span>
-          <span class="text-xs sm:text-sm text-surface-500 tabular-nums">{{ player.projectedPoints | number: '1.1-1' }}</span>
+          <span class="text-xs sm:text-sm text-surface-500 tabular-nums">{{ (projections.projected(player) | number: '1.1-1') ?? '—' }}</span>
         </div>
       </div>
     } @else {
@@ -322,8 +325,8 @@
             @if (game!.gameTimeUtc) {
               · kicks off {{ formatGameTime(game!.gameTimeUtc) }}
             }
-            @if (game!.projectedPoints !== null) {
-              · Proj {{ game!.projectedPoints | number: '1.1-1' }}
+            @if (selectedProjection() !== null) {
+              · Proj {{ selectedProjection() | number: '1.1-1' }}
             }
           </p>
         }

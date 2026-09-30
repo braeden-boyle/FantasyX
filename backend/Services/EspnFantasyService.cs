@@ -369,10 +369,7 @@ public class EspnFantasyService : IEspnFantasyService
                 .Select(entry => int.Parse(entry.Key))
                 .DefaultIfEmpty(1)
                 .Min() ?? 1;
-        var gamesById = schedules
-            .SelectMany(team => team.ProGamesByScoringPeriod?.Values.SelectMany(games => games) ?? [])
-            .DistinctBy(game => game.Id)
-            .ToDictionary(game => game.Id);
+        var gamesById = GamesById(schedules);
 
         var weeks = (teamSchedule?.ProGamesByScoringPeriod?.Keys.Select(int.Parse) ?? [])
             .Concat(teamSchedule?.ByeWeek is int byeWeek ? [byeWeek] : [])
@@ -422,14 +419,14 @@ public class EspnFantasyService : IEspnFantasyService
             games);
     }
 
-    public async Task<IReadOnlyList<PlayerSpreadDto>> GetPlayerSpreadsAsync(
-        PlayerSpreadsRequest request, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<PlayerHistoryDto>> GetPlayerHistoryAsync(
+        PlayerHistoryRequest request, CancellationToken cancellationToken)
     {
         var playerIds = request.PlayerIds.Distinct().ToArray();
         var pastWeeks = Enumerable.Range(1, request.ScoringPeriod - 1).ToArray();
         if (playerIds.Length == 0 || pastWeeks.Length == 0)
         {
-            return playerIds.Select(id => new PlayerSpreadDto(id, 0, 0)).ToList();
+            return playerIds.Select(id => new PlayerHistoryDto(id, [])).ToList();
         }
 
         // Same filter as the player card, but for every requested player and only the weeks
@@ -443,14 +440,20 @@ public class EspnFantasyService : IEspnFantasyService
             },
         });
 
-        var response = await FetchLeagueAsync<EspnPlayerCardResponse>(
+        var cardTask = FetchLeagueAsync<EspnPlayerCardResponse>(
             request.LeagueId,
             request.Season,
-            ["kona_playercard"],
+            ["kona_playercard", "mPositionalRatings"],
             request.EspnS2,
             request.Swid,
             fantasyFilter,
             cancellationToken);
+        var schedulesTask = FetchProTeamSchedulesAsync(request.Season, cancellationToken);
+        await Task.WhenAll(cardTask, schedulesTask);
+
+        var response = await cardTask;
+        var schedules = await schedulesTask;
+        var gamesById = GamesById(schedules);
 
         var playersById = response.Players?
             .Select(card => card.Player)
@@ -459,8 +462,14 @@ public class EspnFantasyService : IEspnFantasyService
 
         return playerIds
             .Select(id => playersById.TryGetValue(id, out var player)
-                ? ToPlayerSpreadDto(player, request.Season, request.ScoringPeriod)
-                : new PlayerSpreadDto(id, 0, 0))
+                ? ToPlayerHistoryDto(
+                    player,
+                    request.Season,
+                    request.ScoringPeriod,
+                    schedules.FirstOrDefault(team => team.Id == player.ProTeamId),
+                    gamesById,
+                    response.PositionAgainstOpponent)
+                : new PlayerHistoryDto(id, []))
             .ToList();
     }
 
@@ -468,22 +477,67 @@ public class EspnFantasyService : IEspnFantasyService
     // player ruled out and still sends a 0-point actual, so without that check a missed game reads
     // as a perfect prediction and makes the player look steadier than they are. A late scratch who
     // was still projected does count, as a real miss.
-    private static PlayerSpreadDto ToPlayerSpreadDto(EspnPlayer player, int season, int currentWeek)
+    private static PlayerHistoryDto ToPlayerHistoryDto(
+        EspnPlayer player,
+        int season,
+        int currentWeek,
+        EspnProTeamScheduleEntry? teamSchedule,
+        IReadOnlyDictionary<long, EspnProGame> gamesById,
+        EspnPositionAgainstOpponent? positionalRatings)
     {
         var seasonStats = player.Stats?.Where(stat => stat.SeasonId == season).ToList() ?? [];
         var actuals = WeeklyStats(seasonStats, statSourceId: 0);
         var projections = WeeklyStats(seasonStats, statSourceId: 1);
 
-        var misses = actuals
+        var weeks = actuals
             .Where(entry => entry.Key < currentWeek
                 && projections.TryGetValue(entry.Key, out var projection)
                 && projection.AppliedTotal > 0)
-            .Select(entry => (entry.Value.AppliedTotal ?? 0) - (projections[entry.Key].AppliedTotal!.Value))
+            .OrderBy(entry => entry.Key)
+            .Select(entry =>
+            {
+                var (game, teamId) = GameFor(entry.Key, player, entry.Value, teamSchedule, gamesById);
+                int? opponentId = game is null ? null
+                    : teamId == game.HomeProTeamId ? game.AwayProTeamId
+                    : game.HomeProTeamId;
+                return new PlayerHistoryWeekDto(
+                    entry.Key,
+                    entry.Value.AppliedTotal ?? 0,
+                    projections[entry.Key].AppliedTotal!.Value,
+                    opponentId is int opponent
+                        ? PositionRankFor(positionalRatings, player.DefaultPositionId, opponent)
+                        : null);
+            })
             .ToList();
 
-        return new PlayerSpreadDto(
-            player.Id, misses.Count, misses.Count == 0 ? 0 : misses.Average(miss => miss * miss));
+        return new PlayerHistoryDto(player.Id, weeks);
     }
+
+    // A played week is matched to its game by id rather than by the player's current team's
+    // schedule, so weeks played for a previous team still show the right opponent. Returns the game
+    // (null when none is found) and the pro team the player played it for.
+    private static (EspnProGame? Game, int TeamId) GameFor(
+        int week,
+        EspnPlayer player,
+        EspnPlayerStat? actual,
+        EspnProTeamScheduleEntry? teamSchedule,
+        IReadOnlyDictionary<long, EspnProGame> gamesById)
+    {
+        if (long.TryParse(actual?.ExternalId, out var gameId) && gamesById.TryGetValue(gameId, out var playedGame))
+        {
+            return (playedGame, actual!.ProTeamId ?? player.ProTeamId);
+        }
+
+        return teamSchedule?.ProGamesByScoringPeriod?.GetValueOrDefault(week.ToString()) is [var scheduledGame, ..]
+            ? (scheduledGame, player.ProTeamId)
+            : (null, player.ProTeamId);
+    }
+
+    private static Dictionary<long, EspnProGame> GamesById(IEnumerable<EspnProTeamScheduleEntry> schedules) =>
+        schedules
+            .SelectMany(team => team.ProGamesByScoringPeriod?.Values.SelectMany(games => games) ?? [])
+            .DistinctBy(game => game.Id)
+            .ToDictionary(game => game.Id);
 
     private static PlayerGameDto ToPlayerGameDto(
         int week,
@@ -496,20 +550,7 @@ public class EspnFantasyService : IEspnFantasyService
         string position,
         EspnPositionAgainstOpponent? positionalRatings)
     {
-        // A played week is matched to its game by id rather than by the player's current team's
-        // schedule, so weeks played for a previous team still show the right opponent.
-        EspnProGame? game = null;
-        var teamId = player.ProTeamId;
-
-        if (long.TryParse(actual?.ExternalId, out var gameId) && gamesById.TryGetValue(gameId, out var playedGame))
-        {
-            game = playedGame;
-            teamId = actual!.ProTeamId ?? teamId;
-        }
-        else if (teamSchedule?.ProGamesByScoringPeriod?.GetValueOrDefault(week.ToString()) is [var scheduledGame, ..])
-        {
-            game = scheduledGame;
-        }
+        var (game, teamId) = GameFor(week, player, actual, teamSchedule, gamesById);
 
         if (game is null && actual is null && week == teamSchedule?.ByeWeek)
         {

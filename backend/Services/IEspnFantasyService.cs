@@ -16,6 +16,6 @@ public interface IEspnFantasyService
 
     Task<PlayerDetailDto> GetPlayerDetailAsync(PlayerDetailRequest request, CancellationToken cancellationToken);
 
-    Task<IReadOnlyList<PlayerSpreadDto>> GetPlayerSpreadsAsync(
-        PlayerSpreadsRequest request, CancellationToken cancellationToken);
+    Task<IReadOnlyList<PlayerHistoryDto>> GetPlayerHistoryAsync(
+        PlayerHistoryRequest request, CancellationToken cancellationToken);
 }

@@ -14,16 +14,20 @@
         </p-tablist>
       </p-tabs>
     }
-    <p-button
-      [class.invisible]="restoring()"
-      class="ml-auto import-button"
-      [ariaLabel]="hasTeam() ? 'Change team' : 'Import'"
-      [label]="hasTeam() ? 'Change team' : 'Import'"
-      icon="pi pi-download"
-      [text]="true"
-      size="small"
-      (onClick)="goToImport()"
-    />
+    <div class="ml-auto flex items-center gap-1" [class.invisible]="restoring()">
+      @if (hasTeam()) {
+        <app-settings-menu />
+      }
+      <p-button
+        class="import-button"
+        [ariaLabel]="hasTeam() ? 'Change team' : 'Import'"
+        [label]="hasTeam() ? 'Change team' : 'Import'"
+        icon="pi pi-download"
+        [text]="true"
+        size="small"
+        (onClick)="goToImport()"
+      />
+    </div>
   </nav>
 </header>
 

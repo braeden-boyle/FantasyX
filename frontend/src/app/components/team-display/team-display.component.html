@@ -55,7 +55,10 @@
     </div>
 
     <div>
-      <h2 class="text-lg font-medium mb-2">Starters</h2>
+      <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
+        <h2 class="text-lg font-medium">Starters</h2>
+        <app-projection-source />
+      </div>
       <p-table [value]="starters()" styleClass="p-datatable-sm">
         <ng-template pTemplate="header">
           <tr>
@@ -102,7 +105,7 @@
                 <p-rating [ngModel]="matchupStars(player.opponentPositionRank)" [readonly]="true" [stars]="5" />
               }
             </td>
-            <td class="!text-right">{{ player.projectedPoints | number: '1.1-1' }}</td>
+            <td class="!text-right">{{ (projections.projected(player) | number: '1.1-1') ?? '—' }}</td>
             <td class="!text-right">{{ player.points | number: '1.1-1' }}</td>
             <td>
               @if (player.injuryStatus) {
@@ -114,7 +117,7 @@
         <ng-template pTemplate="footer">
           <tr>
             <td colspan="4" class="!text-right font-medium">Total</td>
-            <td class="!text-right font-medium">{{ startersProjectedTotal() | number: '1.1-1' }}</td>
+            <td class="!text-right font-medium">{{ (startersProjectedTotal() | number: '1.1-1') ?? '—' }}</td>
             <td class="!text-right font-medium">{{ startersPointsTotal() | number: '1.1-1' }}</td>
             <td></td>
           </tr>
@@ -169,7 +172,7 @@
                 <p-rating [ngModel]="matchupStars(player.opponentPositionRank)" [readonly]="true" [stars]="5" />
               }
             </td>
-            <td class="!text-right">{{ player.projectedPoints | number: '1.1-1' }}</td>
+            <td class="!text-right">{{ (projections.projected(player) | number: '1.1-1') ?? '—' }}</td>
             <td class="!text-right">{{ player.points | number: '1.1-1' }}</td>
             <td>
               @if (player.injuryStatus) {

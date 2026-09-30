@@ -60,11 +60,11 @@ public class EspnFantasyController : ControllerBase
         return Ok(player);
     }
 
-    [HttpPost("player-spreads")]
-    public async Task<ActionResult<IReadOnlyList<PlayerSpreadDto>>> GetPlayerSpreads(
-        PlayerSpreadsRequest request, CancellationToken cancellationToken)
+    [HttpPost("player-history")]
+    public async Task<ActionResult<IReadOnlyList<PlayerHistoryDto>>> GetPlayerHistory(
+        PlayerHistoryRequest request, CancellationToken cancellationToken)
     {
-        var spreads = await _espnFantasyService.GetPlayerSpreadsAsync(request, cancellationToken);
-        return Ok(spreads);
+        var history = await _espnFantasyService.GetPlayerHistoryAsync(request, cancellationToken);
+        return Ok(history);
     }
 }

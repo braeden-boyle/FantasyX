@@ -27,6 +27,8 @@ import { RatingModule } from 'primeng/rating';
 import { PlayerAvatarComponent } from '../player-avatar/player-avatar.component';
 import { ScoringBreakdownComponent } from '../scoring-breakdown/scoring-breakdown.component';
 import { PlayerDetailService } from '../../services/player-detail.service';
+import { ProjectionsService } from '../../services/projections.service';
+import { ProjectionSourceComponent } from '../projection-source/projection-source.component';
 import { Player, PlayerDetail, PlayerGame } from '../../models/team.model';
 import { formatGameDate, formatGameTime, matchupStars, statusSeverity } from '../../utils/player-format';
 
@@ -50,12 +52,14 @@ const NARROW_QUERY = '(max-width: 1023.98px)';
     RatingModule,
     ScoringBreakdownComponent,
     PlayerAvatarComponent,
+    ProjectionSourceComponent,
   ],
   templateUrl: './player-detail-drawer.component.html',
   styleUrl: './player-detail-drawer.component.css',
 })
 export class PlayerDetailDrawerComponent {
   private readonly playerDetail = inject(PlayerDetailService);
+  private readonly projections = inject(ProjectionsService);
 
   // The roster row that was clicked; the header renders from it immediately while the detail loads.
   readonly player = input<Player | null>(null);
@@ -96,15 +100,35 @@ export class PlayerDetailDrawerComponent {
     return d?.summary.positionRank ? `${d.position}${d.summary.positionRank}` : '—';
   });
 
+  // A game's projection from the active source; past weeks show what FantasyX projected at the time.
+  protected gameProjection(game: PlayerGame): number | null {
+    const d = this.detail();
+    return d ? this.projections.gameProjection(d, game) : game.projectedPoints;
+  }
+
+  // ESPN's total, or in FantasyX mode the sum of FantasyX's over the games left (summed the same way
+  // the backend sums ESPN's). Null while FantasyX projections are loading.
+  protected readonly restOfSeasonProjection = computed(() => {
+    const d = this.detail();
+    if (!d) return null;
+    if (!this.projections.fantasyX()) {
+      return this.projections.status() === 'loading' ? null : d.summary.restOfSeasonProjection;
+    }
+    return d.games
+      .filter((g) => g.week >= d.currentWeek && g.status !== 'Bye')
+      .reduce((sum, g) => sum + (this.projections.gameProjection(d, g) ?? 0), 0);
+  });
+
   protected readonly chartData = computed(() => {
     const d = this.detail();
     if (!d) return null;
+    const projected = d.games.map((g) => this.projections.gameProjection(d, g));
     const style = getComputedStyle(document.documentElement);
     const hitColor = style.getPropertyValue('--p-primary-400');
     const missColor = style.getPropertyValue('--p-red-500');
 
     // Each week's bar is colored by whether actual points met the projection.
-    const weekColors = d.games.map((g) => ((g.points ?? 0) >= (g.projectedPoints ?? 0) ? hitColor : missColor));
+    const weekColors = d.games.map((g, i) => ((g.points ?? 0) >= (projected[i] ?? 0) ? hitColor : missColor));
 
     return {
       labels: d.games.map((g) => `W${g.week}`),
@@ -119,9 +143,9 @@ export class PlayerDetailDrawerComponent {
         },
         {
           type: 'line',
-          label: 'Projected',
+          label: this.projections.fantasyX() ? 'FantasyX projected' : 'Projected',
           // Null on the bye week so the line breaks there instead of dipping to zero.
-          data: d.games.map((g) => (g.status === 'Bye' ? null : g.projectedPoints)),
+          data: d.games.map((g, i) => (g.status === 'Bye' ? null : projected[i])),
           borderColor: style.getPropertyValue('--p-surface-500'),
           borderDash: [4, 4],
           pointRadius: 2,

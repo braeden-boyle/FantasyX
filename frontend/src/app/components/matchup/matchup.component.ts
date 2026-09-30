@@ -15,17 +15,17 @@ import { TooltipModule } from 'primeng/tooltip';
 import { TeamStateService } from '../../services/team-state.service';
 import { WeekMatchupsService } from '../../services/week-matchups.service';
 import { PlayerDetailService } from '../../services/player-detail.service';
-import { PlayerSpreadsService } from '../../services/player-spreads.service';
+import { ProjectionsService } from '../../services/projections.service';
 import { TeamLogoComponent } from '../team-logo/team-logo.component';
 import { PlayerAvatarComponent } from '../player-avatar/player-avatar.component';
 import { ScoringBreakdownComponent } from '../scoring-breakdown/scoring-breakdown.component';
+import { ProjectionSourceComponent } from '../projection-source/projection-source.component';
 import {
   Matchup,
   MatchupDetail,
   MatchupTeam,
   Player,
   PlayerDetail,
-  PlayerSpread,
   WeekMatchups,
 } from '../../models/team.model';
 import { involves, mineFirst } from '../../utils/league-format';
@@ -44,12 +44,6 @@ interface PairedRow {
   slot: string;
   left: Player | null;
   right: Player | null;
-}
-
-// null spreads with failed set means the request failed and position defaults stand in.
-interface SpreadsLoad {
-  spreads: ReadonlyMap<number, PlayerSpread> | null;
-  failed: boolean;
 }
 
 interface WeekLoad {
@@ -76,6 +70,7 @@ interface WeekLoad {
     TeamLogoComponent,
     ScoringBreakdownComponent,
     PlayerAvatarComponent,
+    ProjectionSourceComponent,
   ],
   templateUrl: './matchup.component.html',
   styleUrl: './matchup.component.css',
@@ -84,7 +79,7 @@ export class MatchupComponent {
   protected readonly teamState = inject(TeamStateService);
   private readonly weekMatchupsService = inject(WeekMatchupsService);
   private readonly playerDetail = inject(PlayerDetailService);
-  private readonly playerSpreads = inject(PlayerSpreadsService);
+  protected readonly projections = inject(ProjectionsService);
   private readonly router = inject(Router);
 
   // Bound from the /matchup/:teamId route param; absent on plain /matchup, which means the user's own matchup.
@@ -148,22 +143,10 @@ export class MatchupComponent {
     };
   });
 
-  // Each player's week-to-week swing, loaded once per week (not on Refresh) for the win probability.
-  private readonly spreadsLoad = toSignal(
-    toObservable(this.week).pipe(
-      switchMap((week) =>
-        week
-          ? this.playerSpreads.load(week).pipe(
-              map((spreads): SpreadsLoad => ({ spreads, failed: false })),
-              catchError(() => of<SpreadsLoad>({ spreads: null, failed: true })),
-              startWith(null),
-            )
-          : of(null),
-      ),
-    ),
-    { initialValue: null },
-  );
-  protected readonly spreadsFailed = computed(() => !!this.spreadsLoad()?.failed);
+  // Win probability needs each player's history (for their week-to-week swing) in either
+  // projection mode. It's loaded once per week, not on Refresh. If it fails, position defaults
+  // stand in for the swings.
+  protected readonly spreadsFailed = computed(() => this.projections.historyStatus() === 'failed');
 
   // When the scores were fetched, so in-progress games are judged against the same moment.
   private readonly scoresAsOf = computed(() => {
@@ -179,10 +162,21 @@ export class MatchupComponent {
   });
   protected readonly winChance = computed(() => {
     const m = this.matchup();
-    const load = this.spreadsLoad();
-    if (!this.showWinChance() || !m?.opponent || !load) return null;
-    return winProbability(m.team, m.opponent, load.spreads, this.scoresAsOf());
+    const history = this.projections.historyStatus();
+    if (!this.showWinChance() || !m?.opponent || history === 'idle' || history === 'loading') return null;
+    return winProbability(
+      m.team,
+      m.opponent,
+      this.projections.projectionOf(),
+      this.projections.residualsOf(),
+      this.scoresAsOf(),
+    );
   });
+  protected readonly winChanceBasis = computed(
+    () =>
+      `Based on ${this.projections.fantasyX() ? 'FantasyX' : 'ESPN'} projections and each player's ` +
+      'week-to-week swing against them this season',
+  );
   protected readonly barTone = barTone;
   protected readonly barShare = barShare;
   protected readonly formatChance = formatChance;
@@ -221,6 +215,9 @@ export class MatchupComponent {
   private readonly switcher = viewChild<ElementRef<HTMLElement>>('switcher');
 
   constructor() {
+    // Win probability needs player history whichever projections are showing.
+    this.projections.ensureLoaded();
+
     // Keep the current matchup's chip in view as the user steps through them.
     effect(() => {
       const index = this.currentIndex();
@@ -310,8 +307,17 @@ export class MatchupComponent {
     return teamId === this.teamState.myTeamId() ? '/team' : `/team/${teamId}`;
   }
 
-  protected startersProjected(t: MatchupTeam): number {
-    return sortStarters(t.team.players).reduce((sum, p) => sum + p.projectedPoints, 0);
+  // Null while FantasyX projections are loading.
+  protected startersProjected(t: MatchupTeam): number | null {
+    return sortStarters(t.team.players).reduce<number | null>((sum, p) => {
+      const projected = this.projections.projected(p);
+      return sum === null || projected === null ? null : sum + projected;
+    }, 0);
+  }
+
+  // The scoreboard's projected final score for a side, from the active source.
+  protected teamProjection(t: MatchupTeam): number | null {
+    return this.projections.teamTotal(t, t.projectedPoints, this.scoresAsOf());
   }
 
   protected startersPoints(t: MatchupTeam): number {
@@ -353,6 +359,12 @@ export class MatchupComponent {
   protected readonly breakdownGame = computed(() => {
     const week = this.matchup()?.scoringPeriod;
     return this.breakdownLoad()?.detail?.games.find((g) => g.week === week) ?? null;
+  });
+
+  // The modal's projection for the week, matching the player's row.
+  protected readonly selectedProjection = computed(() => {
+    const player = this.selectedPlayer();
+    return player ? this.projections.projected(player) : null;
   });
 
   protected openPlayer(player: Player | null): void {
