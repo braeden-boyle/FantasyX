@@ -24,6 +24,7 @@ import { PlayerDetailDrawerComponent } from '../player-detail-drawer/player-deta
 import { ProjectionSourceComponent } from '../projection-source/projection-source.component';
 import { RankMovementComponent } from '../rank-movement/rank-movement.component';
 import { TAG_LABELS, formatOdds } from '../../utils/playoff-odds';
+import { ordinal } from '../../utils/league-format';
 import { formatGameTime, matchupStars, sortStarters, statusSeverity } from '../../utils/player-format';
 
 @Component({
@@ -137,6 +138,11 @@ export class TeamDisplayComponent {
   });
   protected readonly formatOdds = formatOdds;
   protected readonly tagLabels = TAG_LABELS;
+  // How hard the team's remaining regular-season schedule is, ranked across the league.
+  protected readonly remainingSchedule = computed(() => {
+    const team = this.team();
+    return team ? this.outlook.scheduleOf(team.teamId) : undefined;
+  });
 
   protected readonly statusSeverity = statusSeverity;
   protected readonly formatGameTime = formatGameTime;
@@ -186,9 +192,5 @@ export class TeamDisplayComponent {
     return `${this.ordinal(t.standingRank)} of ${t.leagueSize}`;
   }
 
-  protected ordinal(n: number): string {
-    const suffixes: Record<number, string> = { 1: 'st', 2: 'nd', 3: 'rd' };
-    const isTeens = n % 100 >= 11 && n % 100 <= 13;
-    return `${n}${isTeens ? 'th' : (suffixes[n % 10] ?? 'th')}`;
-  }
+  protected readonly ordinal = ordinal;
 }

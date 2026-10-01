@@ -2,8 +2,9 @@ import { ScheduledMatchup } from '../models/team.model';
 
 // Each team's chance of making the playoffs (and of a first-round bye), from a Monte Carlo of the
 // rest of the regular season. Completed weeks count as played; every later matchup, the current
-// week's included, is simulated: each team scores its strength (utils/power-rankings.ts) plus
-// normal noise of one league-wide spread, the higher score wins, and the final table is seeded
+// week's included, is simulated: each team scores its strength that week (utils/power-rankings.ts,
+// built from that week's projections, so byes and opponents are week-specific) plus normal noise
+// of one league-wide spread, the higher score wins, and the final table is seeded
 // by the league's rules. Late in the season an exact check over every remaining win/loss outcome
 // decides who has clinched (x), clinched a bye (y) or been eliminated (e); only then do the odds
 // read 100% or 0%.
@@ -63,10 +64,17 @@ export function weeklySpread(schedule: readonly ScheduledMatchup[], beforePeriod
   return dof > 0 ? Math.sqrt(squares / dof) : FALLBACK_WEEKLY_SPREAD;
 }
 
+// byPeriod is the team's strength in each remaining matchup period, keyed by period; a period
+// missing from it (or no byPeriod at all) uses strength.
 export interface OddsTeam {
   teamId: number;
   divisionId: number;
   strength: number;
+  byPeriod?: Readonly<Record<number, number>>;
+}
+
+function strengthIn(team: OddsTeam, period: number): number {
+  return team.byPeriod?.[period] ?? team.strength;
 }
 
 export interface OddsInput {
@@ -324,12 +332,14 @@ export function playoffOdds(input: OddsInput): PlayoffOdds | null {
 
   const base = emptyTable(n);
   const remaining: [number, number][] = [];
+  const remainingPeriods: number[] = [];
   for (const m of schedule) {
     const home = indexOf.get(m.homeTeamId);
     const away = m.awayTeamId === null ? undefined : indexOf.get(m.awayTeamId);
     if (home === undefined || away === undefined || m.matchupPeriod > regularSeasonPeriods) continue;
     if (m.matchupPeriod >= currentPeriod) {
       remaining.push([home, away]);
+      remainingPeriods.push(m.matchupPeriod);
       continue;
     }
     const awayPoints = m.awayPoints ?? 0;
@@ -351,9 +361,11 @@ export function playoffOdds(input: OddsInput): PlayoffOdds | null {
   const table = emptyTable(n);
   for (let s = 0; s < simulations; s++) {
     copyTable(base, table);
-    for (const [home, away] of remaining) {
-      const homePoints = teams[home].strength + input.spread * normal();
-      const awayPoints = teams[away].strength + input.spread * normal();
+    for (let g = 0; g < remaining.length; g++) {
+      const [home, away] = remaining[g];
+      const period = remainingPeriods[g];
+      const homePoints = strengthIn(teams[home], period) + input.spread * normal();
+      const awayPoints = strengthIn(teams[away], period) + input.spread * normal();
       record(table, home, away, homePoints > awayPoints ? 1 : homePoints < awayPoints ? 0 : 0.5, homePoints, awayPoints);
     }
     const seeds = seedOrder(table, seeding);

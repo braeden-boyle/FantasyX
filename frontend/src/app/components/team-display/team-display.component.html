@@ -63,6 +63,7 @@
                 <span class="text-xs text-surface-500">of {{ rankedTeams() }}</span>
                 <app-rank-movement [movement]="r.movement" />
               </span>
+              <span class="text-xs text-surface-500">Score {{ r.score | number: '1.1-1' }} / 100</span>
             } @else {
               <p-skeleton width="4rem" height="1.5rem" />
             }
@@ -85,6 +86,9 @@
                 </span>
                 @if (o.bye !== null) {
                   <span class="text-xs text-surface-500">Bye {{ formatOdds(o.bye, o.clinchedBye || o.byeEliminated) }}</span>
+                }
+                @if (remainingSchedule(); as sched) {
+                  <span class="text-xs text-surface-500">Schedule: {{ ordinal(sched.rank) }} hardest</span>
                 }
               } @else {
                 <p-skeleton width="4rem" height="1.5rem" />

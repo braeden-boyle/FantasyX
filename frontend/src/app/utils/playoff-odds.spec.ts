@@ -197,6 +197,21 @@ describe('playoffOdds', () => {
   });
 });
 
+describe('playoffOdds with per-week strength', () => {
+  it('uses a team’s strength in the period it plays, so a weak week costs it', () => {
+    // Identical teams, but 2 is far weaker in week 3 (say, a bye-heavy week) than its usual 100.
+    const flat = playoffOdds(fourTeam({ teams: teams([100, 100, 100, 100]) }))!;
+    const weakWeek = playoffOdds(
+      fourTeam({
+        teams: teams([100, 100, 100, 100]).map((t) => (t.teamId === 2 ? { ...t, byPeriod: { 3: 40 } } : t)),
+      }),
+    )!;
+    expect(weakWeek.teams[1].playoff).toBeLessThan(flat.teams[1].playoff - 0.2);
+    // Its week 3 opponent, 3, benefits.
+    expect(weakWeek.teams[2].playoff).toBeGreaterThan(flat.teams[2].playoff + 0.2);
+  });
+});
+
 describe('formatOdds', () => {
   it('only reads 100% or 0% when settled', () => {
     expect(formatOdds(1, true)).toBe('100%');

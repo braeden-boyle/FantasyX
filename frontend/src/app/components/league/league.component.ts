@@ -18,7 +18,7 @@ import { ProjectionSourceComponent } from '../projection-source/projection-sourc
 import { PowerRankingsComponent } from '../power-rankings/power-rankings.component';
 import { Matchup, MatchupSide, Standing } from '../../models/team.model';
 import { TAG_LABELS, TeamOdds, formatOdds } from '../../utils/playoff-odds';
-import { involves, mineFirst } from '../../utils/league-format';
+import { involves, mineFirst, ordinal } from '../../utils/league-format';
 
 @Component({
   selector: 'app-league',
@@ -96,6 +96,14 @@ export class LeagueComponent {
 
   protected readonly formatOdds = formatOdds;
   protected readonly tagLabels = TAG_LABELS;
+
+  // Remaining schedule strength, ranked (1st = hardest); shown while regular-season games remain.
+  protected readonly showSchedule = computed(() => this.outlook.scheduleTeams() > 0);
+
+  protected scheduleRank(teamId: number): string | null {
+    const rank = this.outlook.scheduleOf(teamId)?.rank;
+    return rank ? ordinal(rank) : null;
+  }
 
   protected standing(teamId: number): Standing | undefined {
     return this.standingsById().get(teamId);

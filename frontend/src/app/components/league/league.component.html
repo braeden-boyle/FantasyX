@@ -46,6 +46,18 @@
             <th class="!text-right">PF</th>
             <th class="!text-right">PA</th>
             <th>Streak</th>
+            @if (showSchedule()) {
+              <th class="whitespace-nowrap">
+                Sched
+                <i
+                  class="pi pi-info-circle text-xs text-surface-500"
+                  tabindex="0"
+                  aria-label="About remaining schedule"
+                  pTooltip="How hard each team's remaining regular-season schedule is: its opponents' average strength in the weeks they meet. 1st is the hardest."
+                  tooltipPosition="top"
+                ></i>
+              </th>
+            }
             @if (showOdds()) {
               <th class="!text-right whitespace-nowrap">
                 Playoffs
@@ -105,6 +117,9 @@
                 <p-tag [severity]="streakSeverity(s.streak)" [value]="s.streak" />
               }
             </td>
+            @if (showSchedule()) {
+              <td class="tabular-nums">{{ scheduleRank(s.teamId) ?? '–' }}</td>
+            }
             @if (showOdds()) {
               <td class="!text-right tabular-nums">
                 @if (o) {

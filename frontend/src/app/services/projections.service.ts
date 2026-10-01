@@ -20,11 +20,19 @@ interface HistoryLoad {
   status: 'loading' | 'ready' | 'failed';
   week: WeekMatchups | null;
   histories: ReadonlyMap<number, HistoryWeek[]>;
+  upcoming: ReadonlyMap<number, ReadonlyMap<number, number>>;
   positions: ReadonlyMap<number, string>;
   model: FantasyXModel | null;
 }
 
-const LOADING: HistoryLoad = { status: 'loading', week: null, histories: new Map(), positions: new Map(), model: null };
+const LOADING: HistoryLoad = {
+  status: 'loading',
+  week: null,
+  histories: new Map(),
+  upcoming: new Map(),
+  positions: new Map(),
+  model: null,
+};
 const FAILED: HistoryLoad = { ...LOADING, status: 'failed' };
 
 // The one place views read projections from, so every figure follows the ESPN / FantasyX setting
@@ -53,11 +61,11 @@ export class ProjectionsService {
           ? this.weekMatchups.load().pipe(
               switchMap((week) =>
                 this.playerHistory.load(week).pipe(
-                  map((histories): HistoryLoad => {
+                  map(({ histories, upcoming }): HistoryLoad => {
                     const positions = new Map(
                       week.teams.flatMap((t) => t.team.players.map((p) => [p.playerId, p.position] as const)),
                     );
-                    return { status: 'ready', week, histories, positions, model: buildModel(histories, positions) };
+                    return { status: 'ready', week, histories, upcoming, positions, model: buildModel(histories, positions) };
                   }),
                 ),
               ),
@@ -128,6 +136,19 @@ export class ProjectionsService {
       return model
         ? model.project(p.playerId, p.position, week, played.projected, played.opponentPositionRank)
         : played.projected;
+    };
+  });
+
+  // The active source's projection for a player in an upcoming week (this one included): 0 for a
+  // week ESPN doesn't project them (a bye, or ruled out). For power rankings and playoff odds. Null
+  // until the history has loaded.
+  readonly futureProjectionOf = computed<((player: Player, week: number) => number) | null>(() => {
+    const load = this.load();
+    if (load?.status !== 'ready') return null;
+    const model = this.fantasyX() ? load.model : null;
+    return (p: Player, week: number) => {
+      const espn = load.upcoming.get(p.playerId)?.get(week) ?? 0;
+      return model ? model.project(p.playerId, p.position, week, espn, null) : espn;
     };
   });
 

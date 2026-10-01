@@ -12,7 +12,9 @@ import {
   bestLineupTotal,
   completedScores,
   powerRankings,
+  powerScores,
   rankByStrength,
+  remainingScheduleStrength,
   rosterStrength,
   teamStrength,
 } from '../utils/power-rankings';
@@ -46,6 +48,23 @@ export interface RankingsView {
   resultsWeight: number;
   resultsOnly: boolean;
   movementUnavailable: boolean;
+}
+
+// Each team's rank on its average strength from this week to the end of the fantasy playoffs (NFL
+// weeks fromWeek to toWeek), its power score on that (the top team 100), and the places it's ahead
+// of (positive) or behind its rank now.
+export interface RestOfSeasonView {
+  status: 'loading' | 'ready' | 'unavailable';
+  rankings: { teamId: number; rank: number; score: number; vsNow: number }[];
+  fromWeek: number;
+  toWeek: number;
+}
+
+// How hard a team's remaining regular-season schedule is: its opponents' average strength in the
+// weeks they meet, ranked across the league (1 = hardest).
+export interface RemainingSchedule {
+  rank: number;
+  opponentStrength: number;
 }
 
 // odds is null when there's nothing to estimate (no playoff settings, or the regular season is over).
@@ -255,17 +274,135 @@ export class LeagueOutlookService {
     return this.ranksById().get(teamId);
   }
 
+  // Each team's strength in every NFL week from this one to the end of the fantasy playoffs, keyed
+  // by week: results blended (as in the ranking) with that week's roster projection. This week uses
+  // the set lineup; later weeks the best lineup the roster (IR aside) can field that week, since
+  // lineups get reset, so byes count in the week they fall. Null until rosters and upcoming
+  // projections have loaded.
+  private readonly weeklyStrengths = computed<Map<number, Map<number, number>> | null>(() => {
+    const league = this.league();
+    const week = this.weekLoad();
+    const future = this.projections.futureProjectionOf();
+    if (!league || week?.status !== 'ready' || !future) return null;
+
+    const { scoringPeriod } = week.week;
+    const lastWeek = Math.max(scoringPeriod, ...Object.values(league.scoringPeriodsByMatchupPeriod).flat());
+    const slots = this.draft()?.lineupSlots ?? [];
+    const scores = completedScores(league.schedule, this.completedBefore());
+    const projectionOf = this.projections.projectionOf();
+
+    const strengths = new Map<number, Map<number, number>>();
+    for (const { team } of week.week.teams) {
+      const byWeek = new Map<number, number>();
+      for (let s = scoringPeriod; s <= lastWeek; s++) {
+        const roster =
+          s === scoringPeriod ? rosterStrength(team.players, projectionOf)
+          : slots.length ? bestLineupTotal(
+              team.players
+                .filter((p) => p.slot !== 'IR')
+                .map((p) => ({ playerId: p.playerId, position: p.position, projected: future(p, s) })),
+              slots,
+            )
+          : rosterStrength(team.players, (p) => future(p, s));
+        const parts = teamStrength(scores.get(team.teamId) ?? [], roster);
+        if (parts) byWeek.set(s, parts.strength);
+      }
+      strengths.set(team.teamId, byWeek);
+    }
+    return strengths;
+  });
+
+  // Each team's strength in each matchup period still to play: the average over its NFL weeks.
+  private readonly periodStrengths = computed<Map<number, Record<number, number>> | null>(() => {
+    const league = this.league();
+    const weekly = this.weeklyStrengths();
+    if (!league || !weekly) return null;
+    const result = new Map<number, Record<number, number>>();
+    for (const [teamId, byWeek] of weekly) {
+      const byPeriod: Record<number, number> = {};
+      for (const [period, weeks] of Object.entries(league.scoringPeriodsByMatchupPeriod)) {
+        const values = weeks.map((w) => byWeek.get(w)).filter((v): v is number => v !== undefined);
+        if (values.length) byPeriod[Number(period)] = values.reduce((a, b) => a + b, 0) / values.length;
+      }
+      result.set(teamId, byPeriod);
+    }
+    return result;
+  });
+
+  readonly restOfSeason = computed<RestOfSeasonView | null>(() => {
+    const rankings = this.rankings();
+    if (!rankings || rankings.status === 'unavailable') return null;
+    const empty = { rankings: [], fromWeek: 0, toWeek: 0 };
+    if (rankings.status === 'loading') return { status: 'loading', ...empty };
+    const weekly = this.weeklyStrengths();
+    if (!weekly) {
+      return { status: this.projections.historyStatus() === 'failed' ? 'unavailable' : 'loading', ...empty };
+    }
+
+    const averages = new Map<number, number>();
+    const weeks = new Set<number>();
+    for (const [teamId, byWeek] of weekly) {
+      if (!byWeek.size) continue;
+      averages.set(teamId, [...byWeek.values()].reduce((a, b) => a + b, 0) / byWeek.size);
+      byWeek.forEach((_, w) => weeks.add(w));
+    }
+    if (!averages.size) return null;
+    const nowRanks = new Map(rankings.rankings.map((r) => [r.teamId, r.rank] as const));
+    const scores = powerScores(averages);
+    return {
+      status: 'ready',
+      rankings: [...rankByStrength(averages)]
+        .map(([teamId, rank]) => ({
+          teamId,
+          rank,
+          score: scores.get(teamId)!,
+          vsNow: (nowRanks.get(teamId) ?? rank) - rank,
+        }))
+        .sort((a, b) => a.rank - b.rank),
+      fromWeek: Math.min(...weeks),
+      toWeek: Math.max(...weeks),
+    };
+  });
+
+  // How hard each team's remaining regular-season schedule is. Uses each opponent's strength in
+  // the period they meet, or its strength now until upcoming projections have loaded. Empty once
+  // the regular season is over.
+  private readonly remainingSchedules = computed(() => {
+    const league = this.league();
+    const rankings = this.rankings();
+    if (!league || rankings?.status !== 'ready') return new Map<number, RemainingSchedule>();
+    const now = new Map(rankings.rankings.map((r) => [r.teamId, r.strength] as const));
+    const byPeriod = this.periodStrengths();
+    const average = remainingScheduleStrength(
+      league.schedule,
+      league.currentMatchupPeriod,
+      (teamId, period) => byPeriod?.get(teamId)?.[period] ?? now.get(teamId) ?? 0,
+    );
+    const ranks = rankByStrength(average);
+    return new Map(
+      [...average].map(([teamId, opponentStrength]) => [teamId, { rank: ranks.get(teamId)!, opponentStrength }] as const),
+    );
+  });
+
+  readonly scheduleTeams = computed(() => this.remainingSchedules().size);
+
+  scheduleOf(teamId: number): RemainingSchedule | undefined {
+    return this.remainingSchedules().get(teamId);
+  }
+
   private readonly oddsInput = computed<OddsInput | null>(() => {
     const league = this.league();
     const rankings = this.rankings();
     if (!league || rankings?.status !== 'ready') return null;
     const strengths = new Map(rankings.rankings.map((r) => [r.teamId, r.strength] as const));
     const average = [...strengths.values()].reduce((sum, s) => sum + s, 0) / strengths.size;
+    const byPeriod = this.periodStrengths();
     return {
       teams: league.standings.map((s) => ({
         teamId: s.teamId,
         divisionId: s.divisionId,
         strength: strengths.get(s.teamId) ?? average,
+        byPeriod: byPeriod?.get(s.teamId),
       })),
       schedule: league.schedule,
       currentPeriod: league.currentMatchupPeriod,
@@ -311,7 +448,17 @@ export class LeagueOutlookService {
 function sameOddsInput(a: OddsInput | null, b: OddsInput | null): boolean {
   if (a === b) return true;
   if (!a || !b || a.schedule !== b.schedule || a.spread !== b.spread || a.teams.length !== b.teams.length) return false;
-  return a.teams.every((t, i) => t.teamId === b.teams[i].teamId && t.strength === b.teams[i].strength);
+  return a.teams.every((t, i) => {
+    const u = b.teams[i];
+    return t.teamId === u.teamId && t.strength === u.strength && sameByPeriod(t.byPeriod, u.byPeriod);
+  });
+}
+
+function sameByPeriod(a?: Readonly<Record<number, number>>, b?: Readonly<Record<number, number>>): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  const keys = Object.keys(a);
+  return keys.length === Object.keys(b).length && keys.every((k) => a[Number(k)] === b[Number(k)]);
 }
 
 // The simulation and exact clinch check run in a web worker so they never block the page, or

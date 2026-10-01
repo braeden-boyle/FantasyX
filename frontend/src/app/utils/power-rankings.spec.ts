@@ -5,7 +5,9 @@ import {
   bestLineupTotal,
   completedScores,
   powerRankings,
+  powerScores,
   rankByStrength,
+  remainingScheduleStrength,
   rosterStrength,
   teamStrength,
 } from './power-rankings';
@@ -107,8 +109,27 @@ describe('powerRankings', () => {
     ]);
   });
 
+  it('scores the top team 100 and the rest as a share of its strength', () => {
+    const ranked = powerRankings(new Map([[1, 120], [2, 90], [3, 60]]), null);
+    expect(ranked.map((r) => r.score)).toEqual([100, 75, 50]);
+    expect([...powerScores(new Map([[1, 0], [2, -5]])).values()]).toEqual([0, 0]);
+  });
+
   it('has no movement without a previous ranking', () => {
     expect(powerRankings(new Map([[1, 100]]), null)[0].movement).toBeNull();
+  });
+});
+
+describe('remainingScheduleStrength', () => {
+  it('averages each team’s remaining opponents, each in the week they meet', () => {
+    const schedule = [game(1, 1, 100, 2, 90), game(2, 1, 0, 3, 0), game(3, 1, 0, 2, 0), game(3, 3, 0, 4, 0)];
+    // Team 3 is 120 in week 2 and 80 otherwise; team 2 is 100 throughout.
+    const strengthIn = (teamId: number, period: number) => (teamId === 3 ? (period === 2 ? 120 : 80) : 100);
+    const schedules = remainingScheduleStrength(schedule, 2, strengthIn);
+    expect(schedules.get(1)).toBe(110); // 3 in week 2 (120), then 2 (100); week 1 is already played
+    expect(schedules.get(2)).toBe(100);
+    expect(schedules.get(3)).toBe(100); // 1 in week 2 and 4 in week 3, both 100
+    expect(schedules.get(4)).toBe(80); // 3 in week 3
   });
 });
 

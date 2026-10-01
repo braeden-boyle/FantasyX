@@ -1,21 +1,32 @@
-import { Component, computed, inject } from '@angular/core';
+import { Component, computed, inject, signal } from '@angular/core';
 import { DecimalPipe } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 import { CardModule } from 'primeng/card';
+import { SelectButtonModule } from 'primeng/selectbutton';
 import { SkeletonModule } from 'primeng/skeleton';
 import { LeagueOutlookService } from '../../services/league-outlook.service';
 import { TeamStateService } from '../../services/team-state.service';
 import { ProjectionSourceComponent } from '../projection-source/projection-source.component';
 import { RankMovementComponent } from '../rank-movement/rank-movement.component';
+import { ordinal } from '../../utils/league-format';
 
 // The league's power rankings, in one parent container: a card with this week's ranking (rank,
-// movement since last week, team), and a separate card below with each team's move since draft day
-// as an arrow on a rank track. Rows are static.
+// movement since last week, team) that switches to the rest of the season's, and a separate card
+// below with each team's move since draft day as an arrow on a rank track. Rows are static.
 // Shown under the standings on wide screens, and on its own page (/league/rankings) below
 // that. It reads the shared LeagueOutlookService; the host page decides when the league loads.
 @Component({
   selector: 'app-power-rankings',
   standalone: true,
-  imports: [DecimalPipe, CardModule, SkeletonModule, ProjectionSourceComponent, RankMovementComponent],
+  imports: [
+    DecimalPipe,
+    FormsModule,
+    CardModule,
+    SelectButtonModule,
+    SkeletonModule,
+    ProjectionSourceComponent,
+    RankMovementComponent,
+  ],
   templateUrl: './power-rankings.component.html',
   styleUrl: './power-rankings.component.css',
 })
@@ -24,6 +35,14 @@ export class PowerRankingsComponent {
   private readonly teamState = inject(TeamStateService);
 
   protected readonly view = this.outlook.rankings;
+  protected readonly restOfSeason = this.outlook.restOfSeason;
+
+  // The first card switches between this week's ranking and the rest of the season's.
+  protected readonly modes = [
+    { label: 'This Week', value: 'week' },
+    { label: 'Rest of Season', value: 'ros' },
+  ];
+  protected readonly mode = signal<'week' | 'ros'>('week');
   protected readonly placeholders = computed(() =>
     Array.from({ length: this.outlook.league()?.standings.length || 10 }, (_, i) => i),
   );
@@ -50,9 +69,5 @@ export class PowerRankingsComponent {
     return n > 1 ? ((n - rank) / (n - 1)) * 100 : 50;
   }
 
-  protected ordinal(n: number): string {
-    const suffixes: Record<number, string> = { 1: 'st', 2: 'nd', 3: 'rd' };
-    const isTeens = n % 100 >= 11 && n % 100 <= 13;
-    return `${n}${isTeens ? 'th' : (suffixes[n % 10] ?? 'th')}`;
-  }
+  protected readonly ordinal = ordinal;
 }

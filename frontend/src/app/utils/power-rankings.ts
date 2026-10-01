@@ -90,13 +90,41 @@ export function teamStrength(scores: readonly number[], roster: number | null): 
   return { strength: w * (results ?? 0) + (1 - w) * roster, results, roster, resultsWeight: w };
 }
 
+// The average strength of each team's remaining regular-season opponents (matchup periods from
+// fromPeriod on), each taken in the period they meet. Teams with no games left are left out.
+export function remainingScheduleStrength(
+  schedule: readonly ScheduledMatchup[],
+  fromPeriod: number,
+  strengthIn: (teamId: number, period: number) => number,
+): Map<number, number> {
+  const faced = new Map<number, number[]>();
+  const add = (teamId: number, opponentStrength: number) =>
+    faced.set(teamId, [...(faced.get(teamId) ?? []), opponentStrength]);
+  for (const m of schedule) {
+    if (m.matchupPeriod < fromPeriod || m.awayTeamId === null) continue;
+    add(m.homeTeamId, strengthIn(m.awayTeamId, m.matchupPeriod));
+    add(m.awayTeamId, strengthIn(m.homeTeamId, m.matchupPeriod));
+  }
+  return new Map([...faced].map(([teamId, s]) => [teamId, s.reduce((a, b) => a + b, 0) / s.length] as const));
+}
+
 // movement is how many places a team has climbed since the previous ranking (negative for a fall),
-// or null with no previous ranking.
+// or null with no previous ranking. score is the team's strength as a share of the top team's, out
+// of 100 (see powerScores).
 export interface PowerRank {
   teamId: number;
   rank: number;
   strength: number;
+  score: number;
   movement: number | null;
+}
+
+// Each team's power score: its strength as a percentage of the strongest team's, so the top team is
+// 100 and a team on 87 projects to score 87% of what the leader does in a week. 0 for every team if
+// none has a positive strength.
+export function powerScores(strengths: ReadonlyMap<number, number>): Map<number, number> {
+  const top = Math.max(0, ...strengths.values());
+  return new Map([...strengths].map(([teamId, s]) => [teamId, top > 0 ? (100 * Math.max(0, s)) / top : 0] as const));
 }
 
 // Rank 1 is the strongest; equal strengths fall back to team id so the order is stable.
@@ -111,11 +139,18 @@ export function powerRankings(
   previous: ReadonlyMap<number, number> | null,
 ): PowerRank[] {
   const ranks = rankByStrength(strengths);
+  const scores = powerScores(strengths);
   const previousRanks = previous ? rankByStrength(previous) : null;
   return [...ranks.entries()]
     .map(([teamId, rank]) => {
       const before = previousRanks?.get(teamId);
-      return { teamId, rank, strength: strengths.get(teamId)!, movement: before === undefined ? null : before - rank };
+      return {
+        teamId,
+        rank,
+        strength: strengths.get(teamId)!,
+        score: scores.get(teamId)!,
+        movement: before === undefined ? null : before - rank,
+      };
     })
     .sort((a, b) => a.rank - b.rank);
 }

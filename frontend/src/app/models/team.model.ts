@@ -71,12 +71,15 @@ export interface ScheduledMatchup {
 }
 
 // schedule is every regular-season matchup; a period before currentMatchupPeriod is complete.
+// scoringPeriodsByMatchupPeriod lists the NFL weeks in each matchup period, keyed by period as a
+// string, playoffs included (a playoff round can span two weeks).
 // regularSeasonMatchupPeriods and playoffTeamCount are 0 when ESPN doesn't send them.
 export interface League {
   leagueName: string;
   currentMatchupPeriod: number;
   standings: Standing[];
   matchups: Matchup[];
+  scoringPeriodsByMatchupPeriod: Record<string, number[]>;
   regularSeasonMatchupPeriods: number;
   playoffTeamCount: number;
   playoffSeedingRule: string | null;
@@ -169,10 +172,12 @@ export interface HistoryWeek {
   opponentPositionRank: number | null;
 }
 
-// A player's weeks before the requested scoring period; empty with none.
+// A player's weeks before the requested scoring period (empty with none), and ESPN's projection for
+// that period and each later NFL week it's projected above 0 (none for a bye or a player ruled out).
 export interface PlayerHistory {
   playerId: number;
   weeks: HistoryWeek[];
+  upcoming: { week: number; projected: number }[];
 }
 
 export type PlayerGameStatus = 'Played' | 'DidNotPlay' | 'Bye' | 'Upcoming';
