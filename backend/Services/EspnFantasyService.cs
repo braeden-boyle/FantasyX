@@ -77,11 +77,16 @@ public class EspnFantasyService : IEspnFantasyService
                 entry.Winner ?? "UNDECIDED"))
             .ToList() ?? [];
 
+        var scoringPeriodsByMatchupPeriod = (scheduleSettings?.MatchupPeriods ?? [])
+            .Where(entry => int.TryParse(entry.Key, out _))
+            .ToDictionary(entry => int.Parse(entry.Key), entry => (IReadOnlyList<int>)entry.Value.Order().ToList());
+
         return new LeagueDto(
             league.Settings?.Name ?? string.Empty,
             period,
             standings,
             matchups,
+            scoringPeriodsByMatchupPeriod,
             regularSeasonPeriods,
             scheduleSettings?.PlayoffTeamCount ?? 0,
             scheduleSettings?.PlayoffSeedingRule,
@@ -448,20 +453,19 @@ public class EspnFantasyService : IEspnFantasyService
         PlayerHistoryRequest request, CancellationToken cancellationToken)
     {
         var playerIds = request.PlayerIds.Distinct().ToArray();
-        var pastWeeks = Enumerable.Range(1, request.ScoringPeriod - 1).ToArray();
-        if (playerIds.Length == 0 || pastWeeks.Length == 0)
+        if (playerIds.Length == 0)
         {
-            return playerIds.Select(id => new PlayerHistoryDto(id, [])).ToList();
+            return [];
         }
 
-        // Same filter as the player card, but for every requested player and only the weeks
-        // already played.
+        // Same filter as the player card, but for every requested player: the weeks already played
+        // for their history, and the rest of the NFL season for upcoming projections.
         var fantasyFilter = JsonSerializer.Serialize(new
         {
             players = new
             {
                 filterIds = new { value = playerIds },
-                filterStatsForScoringPeriodIds = new { value = pastWeeks },
+                filterStatsForScoringPeriodIds = new { value = Enumerable.Range(1, RegularSeasonWeeks).ToArray() },
             },
         });
 
@@ -494,7 +498,7 @@ public class EspnFantasyService : IEspnFantasyService
                     schedules.FirstOrDefault(team => team.Id == player.ProTeamId),
                     gamesById,
                     response.PositionAgainstOpponent)
-                : new PlayerHistoryDto(id, []))
+                : new PlayerHistoryDto(id, [], []))
             .ToList();
     }
 
@@ -598,7 +602,13 @@ public class EspnFantasyService : IEspnFantasyService
             })
             .ToList();
 
-        return new PlayerHistoryDto(player.Id, weeks);
+        var upcoming = projections
+            .Where(entry => entry.Key >= currentWeek && entry.Value.AppliedTotal > 0)
+            .OrderBy(entry => entry.Key)
+            .Select(entry => new PlayerProjectionWeekDto(entry.Key, entry.Value.AppliedTotal!.Value))
+            .ToList();
+
+        return new PlayerHistoryDto(player.Id, weeks, upcoming);
     }
 
     // A played week is matched to its game by id rather than by the player's current team's

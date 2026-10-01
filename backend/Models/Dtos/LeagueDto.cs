@@ -1,7 +1,8 @@
 namespace FantasyX.Backend.Models.Dtos;
 
 // Schedule is every regular-season matchup, played or not, for power rankings and playoff odds; a
-// period before CurrentMatchupPeriod is complete. RegularSeasonMatchupPeriods and PlayoffTeamCount
+// period before CurrentMatchupPeriod is complete. ScoringPeriodsByMatchupPeriod lists the NFL weeks
+// in each matchup period, playoffs included (a playoff round can span two). RegularSeasonMatchupPeriods and PlayoffTeamCount
 // are 0 when ESPN doesn't send them. PlayoffSeedingRule is ESPN's tiebreaker name, e.g.
 // "TOTAL_POINTS_SCORED" or "H2H_RECORD".
 public record LeagueDto(
@@ -9,6 +10,7 @@ public record LeagueDto(
     int CurrentMatchupPeriod,
     IReadOnlyList<StandingDto> Standings,
     IReadOnlyList<MatchupDto> Matchups,
+    IReadOnlyDictionary<int, IReadOnlyList<int>> ScoringPeriodsByMatchupPeriod,
     int RegularSeasonMatchupPeriods,
     int PlayoffTeamCount,
     string? PlayoffSeedingRule,
