@@ -59,3 +59,12 @@ Content-Type: application/json
 }
 
 ###
+
+### Get the draft (every pick with its week 1 projection, plus the starting lineup slots)
+POST {{FantasyX.Backend_HostAddress}}/api/espn/draft
+Content-Type: application/json
+
+{
+  "leagueId": 123456,
+  "season": 2024
+}

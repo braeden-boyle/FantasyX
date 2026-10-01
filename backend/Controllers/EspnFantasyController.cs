@@ -67,4 +67,11 @@ public class EspnFantasyController : ControllerBase
         var history = await _espnFantasyService.GetPlayerHistoryAsync(request, cancellationToken);
         return Ok(history);
     }
+
+    [HttpPost("draft")]
+    public async Task<ActionResult<DraftDto>> GetDraft(LeagueTeamsRequest request, CancellationToken cancellationToken)
+    {
+        var draft = await _espnFantasyService.GetDraftAsync(request, cancellationToken);
+        return Ok(draft);
+    }
 }

@@ -7,14 +7,29 @@ public record EspnLeagueResponse(
     EspnPositionAgainstOpponent? PositionAgainstOpponent,
     EspnSettings? Settings,
     List<EspnMember>? Members,
-    List<EspnScheduleEntry>? Schedule);
+    List<EspnScheduleEntry>? Schedule,
+    EspnDraftDetail? DraftDetail);
 
 // Only populated when the "mSettings" view is requested.
-public record EspnSettings(string? Name, EspnScheduleSettings? ScheduleSettings);
+public record EspnSettings(string? Name, EspnScheduleSettings? ScheduleSettings, EspnRosterSettings? RosterSettings);
+
+// Lineup slot counts, keyed by lineup slot id as a string (bench and IR included).
+public record EspnRosterSettings(Dictionary<string, int>? LineupSlotCounts);
+
+// Only populated when the "mDraftDetail" view is requested. Picks is empty before the draft.
+public record EspnDraftDetail(bool? Drafted, List<EspnDraftPick>? Picks);
+
+public record EspnDraftPick(int PlayerId, int TeamId, int OverallPickNumber);
 
 // Scoring period ids in each matchup period, keyed by matchup period id as a string. A playoff
-// round can span more than one scoring period.
-public record EspnScheduleSettings(Dictionary<string, List<int>>? MatchupPeriods);
+// round can span more than one scoring period. MatchupPeriodCount is the number of regular-season
+// matchup periods; PlayoffSeedingRule is ESPN's tiebreaker name, e.g. "TOTAL_POINTS_SCORED" or
+// "H2H_RECORD".
+public record EspnScheduleSettings(
+    Dictionary<string, List<int>>? MatchupPeriods,
+    int? MatchupPeriodCount,
+    int? PlayoffTeamCount,
+    string? PlayoffSeedingRule);
 
 // PlayoffSeed doubles as the team's current standing rank within the league. Owners holds member
 // ids (SWIDs) that match EspnMember.Id.
@@ -28,7 +43,8 @@ public record EspnTeam(
     EspnRoster? Roster,
     int? PlayoffSeed,
     string? Logo,
-    List<string>? Owners);
+    List<string>? Owners,
+    int? DivisionId);
 
 public record EspnRecord(EspnOverallRecord? Overall);
 
@@ -47,8 +63,9 @@ public record EspnOverallRecord(
 public record EspnMember(string? Id, string? DisplayName, string? FirstName, string? LastName);
 
 // One head-to-head matchup; only populated when the "mMatchupScore" view is requested. Away is
-// null for a bye. The *Live totals are only filled in by the "mScoreboard" view.
-public record EspnScheduleEntry(int MatchupPeriodId, EspnMatchupSide? Home, EspnMatchupSide? Away);
+// null for a bye. The *Live totals are only filled in by the "mScoreboard" view. Winner is "HOME",
+// "AWAY", "TIE" or "UNDECIDED".
+public record EspnScheduleEntry(int MatchupPeriodId, EspnMatchupSide? Home, EspnMatchupSide? Away, string? Winner);
 
 public record EspnMatchupSide(
     int TeamId, double? TotalPoints, double? TotalPointsLive, double? TotalProjectedPointsLive);

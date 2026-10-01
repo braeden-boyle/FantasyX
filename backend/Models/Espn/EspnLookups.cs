@@ -42,6 +42,24 @@ public static class EspnLookups
 
     private static readonly HashSet<int> BenchSlots = [20, 21];
 
+    // The positions each offensive starting slot accepts. Slots not listed (bench, IR, and the
+    // individual defensive player slots) are left out of draft-day lineups.
+    private static readonly IReadOnlyDictionary<int, (string Name, string[] Positions)> StartingSlots =
+        new Dictionary<int, (string, string[])>
+        {
+            [0] = ("QB", ["QB"]),
+            [1] = ("TQB", ["QB"]),
+            [2] = ("RB", ["RB"]),
+            [3] = ("RB/WR", ["RB", "WR"]),
+            [4] = ("WR", ["WR"]),
+            [5] = ("WR/TE", ["WR", "TE"]),
+            [6] = ("TE", ["TE"]),
+            [7] = ("OP", ["QB", "RB", "WR", "TE"]),
+            [16] = ("D/ST", ["D/ST"]),
+            [17] = ("K", ["K"]),
+            [23] = ("FLEX", ["RB", "WR", "TE"]),
+        };
+
     private const int DefenseSpecialTeamsPositionId = 16;
 
     public static string PositionName(int defaultPositionId) =>
@@ -54,6 +72,11 @@ public static class EspnLookups
         LineupSlots.GetValueOrDefault(lineupSlotId, $"SLOT_{lineupSlotId}");
 
     public static bool IsStarterSlot(int lineupSlotId) => !BenchSlots.Contains(lineupSlotId);
+
+    // A starting slot's name and the positions that can fill it; null for bench, IR and slots
+    // draft-day lineups don't fill.
+    public static (string Name, string[] Positions)? StartingSlot(int lineupSlotId) =>
+        StartingSlots.TryGetValue(lineupSlotId, out var slot) ? slot : null;
 
     public static bool IsDefenseSpecialTeams(int defaultPositionId) => defaultPositionId == DefenseSpecialTeamsPositionId;
 

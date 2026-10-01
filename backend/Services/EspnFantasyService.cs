@@ -61,7 +61,31 @@ public class EspnFantasyService : IEspnFantasyService
             .Select(entry => new MatchupDto(ToMatchupSideDto(entry.Home!), ToMatchupSideDto(entry.Away!)))
             .ToList() ?? [];
 
-        return new LeagueDto(league.Settings?.Name ?? string.Empty, period, standings, matchups);
+        var scheduleSettings = league.Settings?.ScheduleSettings;
+        var regularSeasonPeriods = scheduleSettings?.MatchupPeriodCount ?? 0;
+        // Playoff rounds are left out; without a regular-season length, nothing can be told apart.
+        var schedule = league.Schedule?
+            .Where(entry => entry.Home is not null
+                && (regularSeasonPeriods == 0 || entry.MatchupPeriodId <= regularSeasonPeriods))
+            .OrderBy(entry => entry.MatchupPeriodId)
+            .Select(entry => new ScheduledMatchupDto(
+                entry.MatchupPeriodId,
+                entry.Home!.TeamId,
+                entry.Away?.TeamId,
+                entry.Home.TotalPoints ?? 0,
+                entry.Away is null ? null : entry.Away.TotalPoints ?? 0,
+                entry.Winner ?? "UNDECIDED"))
+            .ToList() ?? [];
+
+        return new LeagueDto(
+            league.Settings?.Name ?? string.Empty,
+            period,
+            standings,
+            matchups,
+            regularSeasonPeriods,
+            scheduleSettings?.PlayoffTeamCount ?? 0,
+            scheduleSettings?.PlayoffSeedingRule,
+            schedule);
     }
 
     // Logos a manager uploaded (rather than picked from ESPN's presets) are served from this host,
@@ -125,7 +149,8 @@ public class EspnFantasyService : IEspnFantasyService
             overall?.Ties ?? 0,
             overall?.PointsFor ?? 0,
             overall?.PointsAgainst ?? 0,
-            StreakLabel(overall));
+            StreakLabel(overall),
+            team.DivisionId ?? 0);
     }
 
     private static string? StreakLabel(EspnOverallRecord? overall)
@@ -471,6 +496,69 @@ public class EspnFantasyService : IEspnFantasyService
                     response.PositionAgainstOpponent)
                 : new PlayerHistoryDto(id, []))
             .ToList();
+    }
+
+    // Week 1 projections are what every team was expected to score before a game was played, so
+    // they stand in for draft day.
+    private const int DraftDayWeek = 1;
+
+    public async Task<DraftDto> GetDraftAsync(LeagueTeamsRequest request, CancellationToken cancellationToken)
+    {
+        var league = await FetchLeagueAsync<EspnLeagueResponse>(
+            request.LeagueId, request.Season, ["mDraftDetail", "mSettings"], request.EspnS2, request.Swid, null, cancellationToken);
+
+        var lineupSlots = (league.Settings?.RosterSettings?.LineupSlotCounts ?? [])
+            .Select(entry => (Id: int.TryParse(entry.Key, out var id) ? id : -1, Count: entry.Value))
+            .Where(entry => entry.Count > 0 && EspnLookups.StartingSlot(entry.Id) is not null)
+            .OrderBy(entry => entry.Id)
+            .Select(entry =>
+            {
+                var (name, positions) = EspnLookups.StartingSlot(entry.Id)!.Value;
+                return new LineupSlotDto(name, entry.Count, positions);
+            })
+            .ToList();
+
+        var picks = league.DraftDetail?.Picks?
+            .Where(pick => pick.PlayerId != 0 && pick.TeamId != 0)
+            .OrderBy(pick => pick.OverallPickNumber)
+            .ToList() ?? [];
+        if (picks.Count == 0)
+        {
+            return new DraftDto([], lineupSlots);
+        }
+
+        // Every drafted player, dropped ones included, in one card call narrowed to week 1.
+        var fantasyFilter = JsonSerializer.Serialize(new
+        {
+            players = new
+            {
+                filterIds = new { value = picks.Select(pick => pick.PlayerId).Distinct().ToArray() },
+                filterStatsForScoringPeriodIds = new { value = new[] { DraftDayWeek } },
+            },
+        });
+        var cards = await FetchLeagueAsync<EspnPlayerCardResponse>(
+            request.LeagueId, request.Season, ["kona_playercard"], request.EspnS2, request.Swid, fantasyFilter, cancellationToken);
+
+        var playersById = cards.Players?
+            .Select(card => card.Player)
+            .DistinctBy(player => player.Id)
+            .ToDictionary(player => player.Id) ?? [];
+
+        return new DraftDto(
+            picks
+                .Select(pick =>
+                {
+                    var player = playersById.GetValueOrDefault(pick.PlayerId);
+                    var seasonStats = player?.Stats?.Where(stat => stat.SeasonId == request.Season) ?? [];
+                    var projection = WeeklyStats(seasonStats, statSourceId: 1).GetValueOrDefault(DraftDayWeek);
+                    return new DraftPickDto(
+                        pick.TeamId,
+                        pick.PlayerId,
+                        player is null ? string.Empty : EspnLookups.PositionName(player.DefaultPositionId),
+                        projection?.AppliedTotal ?? 0);
+                })
+                .ToList(),
+            lineupSlots);
     }
 
     // Only weeks with an actual and a projection above 0 count. ESPN zeroes the projection of a
