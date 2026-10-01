@@ -1,0 +1,169 @@
+<!-- One container for both rankings: this week's (switchable to the rest of the season's), and below it
+     each team's move since draft day. -->
+<section class="rankings-group" aria-labelledby="power-rankings-title">
+  <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+    <h2 id="power-rankings-title" class="text-lg font-medium">Power Rankings</h2>
+    <app-projection-source />
+  </div>
+
+  <p-card>
+    <!-- This week's ranking, or switched to the rest of the season once there's one to show. -->
+    @if (restOfSeason()) {
+      <p-selectbutton
+        class="mb-2"
+        [options]="modes"
+        [ngModel]="mode()"
+        (ngModelChange)="mode.set($event)"
+        [allowEmpty]="false"
+        optionLabel="label"
+        optionValue="value"
+        ariaLabelledBy="power-rankings-title"
+        size="small"
+      />
+    } @else {
+      <h3 class="card-title">This Week</h3>
+    }
+
+    @if (mode() === 'ros' && restOfSeason(); as ros) {
+      @switch (ros.status) {
+        @case ('ready') {
+          <div class="rankings-row list-header" aria-hidden="true">
+            <span class="text-right pr-1">#</span>
+            <span>vs now</span>
+            <span>Team</span>
+            <span class="text-right">Score</span>
+          </div>
+          <ol class="rankings-list">
+            @for (r of ros.rankings; track r.teamId) {
+              <li class="rankings-row" [class.rankings-row-mine]="isMine(r.teamId)">
+                <span class="rank tabular-nums">{{ r.rank }}</span>
+                <app-rank-movement [movement]="r.vsNow" period="compared with this week" />
+                <span class="truncate" [class.font-semibold]="isMine(r.teamId)">{{ name(r.teamId) }}</span>
+                <span class="score tabular-nums">{{ r.score | number: '1.1-1' }}</span>
+              </li>
+            }
+          </ol>
+          <p class="legend">
+            Ranked by average strength over weeks {{ ros.fromWeek }}–{{ ros.toWeek }}, through the fantasy playoffs:
+            points per week blended with the best lineup each roster can field that week, so bye weeks count when
+            they fall. Arrows compare with this week's rank. Scores put the top team at 100.
+          </p>
+        }
+        @case ('unavailable') {
+          <p class="text-surface-500 text-sm">Rest-of-season rankings are unavailable: upcoming projections couldn't be loaded.</p>
+        }
+        @default {
+          <div class="flex flex-col gap-2" role="status" aria-label="Loading rest-of-season rankings">
+            @for (i of placeholders(); track i) {
+              <p-skeleton height="1.25rem" />
+            }
+          </div>
+        }
+      }
+    } @else {
+      @switch (view()?.status) {
+        @case ('ready') {
+          @let v = view()!;
+          <div class="rankings-row list-header" aria-hidden="true">
+            <span class="text-right pr-1">#</span>
+            <span>Week</span>
+            <span>Team</span>
+            <span class="text-right">Score</span>
+          </div>
+          <ol class="rankings-list">
+            @for (r of v.rankings; track r.teamId) {
+              <li class="rankings-row" [class.rankings-row-mine]="isMine(r.teamId)">
+                <span class="rank tabular-nums">{{ r.rank }}</span>
+                <app-rank-movement [movement]="r.movement" />
+                <span class="truncate" [class.font-semibold]="isMine(r.teamId)">{{ name(r.teamId) }}</span>
+                <span class="score tabular-nums">{{ r.score | number: '1.1-1' }}</span>
+              </li>
+            }
+          </ol>
+          <p class="legend">
+            @if (v.completedWeeks === 0) {
+              Before week 1, teams are ranked by their roster's projected score.
+            } @else {
+              Through week {{ v.completedWeeks }}.
+              @if (!v.movementUnavailable) {
+                Arrows show the change from
+                @if (v.completedWeeks === 1) {
+                  {{ v.hasDraft ? 'the draft-day ranking' : 'the ranking before week 1' }}.
+                } @else {
+                  the ranking after week {{ v.completedWeeks - 1 }}.
+                }
+              }
+              @if (v.resultsOnly) {
+                Ranked by points per week.
+              } @else {
+                Ranked by points per week ({{ v.resultsWeight * 100 | number: '1.0-0' }}%) blended with each roster's
+                projected score this week ({{ (1 - v.resultsWeight) * 100 | number: '1.0-0' }}%).
+              }
+            }
+            Scores are each team's strength as a share of the top team's, which is 100.
+          </p>
+          @if (v.resultsOnly) {
+            <p class="note">Based on results only: rosters couldn't be loaded.</p>
+          }
+          @if (v.movementUnavailable) {
+            <p class="note">Movement since last week is unavailable.</p>
+          }
+        }
+        @case ('unavailable') {
+          <p class="text-surface-500 text-sm">Power rankings aren't available yet.</p>
+        }
+        @default {
+          <div class="flex flex-col gap-2" role="status" aria-label="Loading power rankings">
+            @for (i of placeholders(); track i) {
+              <p-skeleton height="1.25rem" />
+            }
+          </div>
+        }
+      }
+    }
+  </p-card>
+
+  @if (view()?.status === 'ready' && view()!.hasDraft) {
+    @let v = view()!;
+    <p-card class="block mt-4">
+      <h3 class="card-title">Since Draft Day</h3>
+      <div class="draft-row draft-axis" aria-hidden="true">
+        <span></span>
+        <span class="flex justify-between"><span>{{ ordinal(teamCount()) }}</span><span>1st</span></span>
+        <span></span>
+      </div>
+      <ol class="rankings-list">
+        @for (r of v.rankings; track r.teamId) {
+          <li class="draft-row" [class.rankings-row-mine]="isMine(r.teamId)">
+            <span class="truncate" [class.font-semibold]="isMine(r.teamId)">{{ name(r.teamId) }}</span>
+            @if (r.draftRank !== null) {
+              <span class="track" aria-hidden="true">
+                @if (r.draftRank === r.rank) {
+                  <span class="dot" [style.left.%]="position(r.rank)"></span>
+                } @else {
+                  <span
+                    class="arrow"
+                    [class.arrow-up]="r.rank < r.draftRank"
+                    [class.arrow-down]="r.rank > r.draftRank"
+                    [style.left.%]="Math.min(position(r.rank), position(r.draftRank))"
+                    [style.width.%]="Math.abs(position(r.rank) - position(r.draftRank))"
+                  ></span>
+                }
+              </span>
+              <span class="draft-ranks tabular-nums">
+                <span class="sr-only">Draft-day rank {{ r.draftRank }}, now {{ r.rank }}.</span>
+                <span aria-hidden="true">{{ r.draftRank }} → {{ r.rank }}</span>
+              </span>
+            } @else {
+              <span class="track"></span>
+              <span class="draft-ranks text-surface-500">–</span>
+            }
+          </li>
+        }
+      </ol>
+      <p class="legend">
+        Each arrow runs from a team's draft-day rank (the best lineup its picks could field) to its rank now.
+      </p>
+    </p-card>
+  }
+</section>

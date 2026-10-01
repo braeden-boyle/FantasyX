@@ -23,21 +23,60 @@
     </div>
 
     <!-- Standings beside a single column of matchups; they stack on narrow screens. -->
-    <div class="grid gap-6 grid-cols-1 lg:grid-cols-[minmax(0,1fr)_22rem] items-start">
+    <div class="grid gap-6 grid-cols-1 lg:grid-cols-[minmax(0,1fr)_22rem] xl:grid-cols-[minmax(0,1fr)_20rem] items-start">
     <section class="min-w-0">
-      <h2 class="text-lg font-medium mb-2">Standings</h2>
-      <p-table [value]="l.standings" styleClass="p-datatable-sm">
+      <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
+        <h2 class="text-lg font-medium">Standings</h2>
+        <div class="flex flex-wrap items-center gap-2">
+          <app-projection-source />
+          <!-- Below xl the rankings card doesn't fit beside the standings, so they get their own page. -->
+          <a pButton routerLink="/league/rankings" [outlined]="true" [rounded]="true" size="small" class="rankings-link xl:!hidden">
+            <i class="pi pi-sort-amount-down" pButtonIcon></i>
+            <span pButtonLabel>Power Rankings</span>
+          </a>
+        </div>
+      </div>
+      <!-- Scrolls sideways on narrow screens, with the seed and team pinned. -->
+      <p-table [value]="l.standings" styleClass="p-datatable-sm" [scrollable]="true" [tableStyle]="{ 'min-width': '40rem' }">
         <ng-template pTemplate="header">
           <tr>
-            <th>#</th>
-            <th>Team</th>
+            <th pFrozenColumn>#</th>
+            <th pFrozenColumn class="team-column">Team</th>
             <th>Record</th>
             <th class="!text-right">PF</th>
             <th class="!text-right">PA</th>
             <th>Streak</th>
+            @if (showSchedule()) {
+              <th class="whitespace-nowrap">
+                Sched
+                <i
+                  class="pi pi-info-circle text-xs text-surface-500"
+                  tabindex="0"
+                  aria-label="About remaining schedule"
+                  pTooltip="How hard each team's remaining regular-season schedule is: its opponents' average strength in the weeks they meet. 1st is the hardest."
+                  tooltipPosition="top"
+                ></i>
+              </th>
+            }
+            @if (showOdds()) {
+              <th class="!text-right whitespace-nowrap">
+                Playoffs
+                <i
+                  class="pi pi-info-circle text-xs text-surface-500"
+                  tabindex="0"
+                  aria-label="About playoff odds"
+                  pTooltip="Chance of making the playoffs, from 10,000 simulations of the rest of the regular season. Updates once each week is complete."
+                  tooltipPosition="top"
+                ></i>
+              </th>
+              @if (hasByes()) {
+                <th class="!text-right">Bye</th>
+              }
+            }
           </tr>
         </ng-template>
         <ng-template pTemplate="body" let-s>
+          @let o = odds(s.teamId);
           <tr
             class="cursor-pointer team-row"
             [class.team-row-mine]="isMine(s.teamId)"
@@ -47,12 +86,23 @@
             (keydown.enter)="openTeam(s.teamId)"
             (keydown.space)="$event.preventDefault(); openTeam(s.teamId)"
           >
-            <td>{{ s.seed || '–' }}</td>
-            <td>
+            <td pFrozenColumn>{{ s.seed || '–' }}</td>
+            <td pFrozenColumn class="team-column">
               <div class="flex items-center gap-2">
-                <app-team-logo [logoUrl]="s.logoUrl" [abbrev]="s.abbrev" size="large" />
-                <div class="flex flex-col">
-                  <span [class.font-semibold]="isMine(s.teamId)">{{ s.name }}</span>
+                <app-team-logo [logoUrl]="s.logoUrl" [abbrev]="s.abbrev" size="large" class="hidden sm:block" />
+                <div class="flex flex-col min-w-0">
+                  <span class="flex items-center gap-1.5">
+                    <span [class.font-semibold]="isMine(s.teamId)">{{ s.name }}</span>
+                    @if (o?.tag; as tag) {
+                      <p-tag
+                        [value]="tag"
+                        [severity]="tag === 'e' ? 'secondary' : 'success'"
+                        styleClass="odds-tag"
+                        [pTooltip]="tagLabels[tag]"
+                        [attr.aria-label]="tagLabels[tag]"
+                      />
+                    }
+                  </span>
                   @if (s.owners.length) {
                     <span class="text-xs text-surface-500">{{ s.owners.join(', ') }}</span>
                   }
@@ -67,9 +117,36 @@
                 <p-tag [severity]="streakSeverity(s.streak)" [value]="s.streak" />
               }
             </td>
+            @if (showSchedule()) {
+              <td class="tabular-nums">{{ scheduleRank(s.teamId) ?? '–' }}</td>
+            }
+            @if (showOdds()) {
+              <td class="!text-right tabular-nums">
+                @if (o) {
+                  {{ formatOdds(o.playoff, o.clinched || o.eliminated) }}
+                } @else if (oddsLoading()) {
+                  <p-skeleton width="3rem" height="1rem" styleClass="ml-auto" />
+                }
+              </td>
+              @if (hasByes()) {
+                <td class="!text-right tabular-nums">
+                  @if (o?.bye !== null && o?.bye !== undefined) {
+                    {{ formatOdds(o!.bye!, o!.clinchedBye || o!.byeEliminated) }}
+                  }
+                </td>
+              }
+            }
           </tr>
         </ng-template>
       </p-table>
+      @if (unsupportedRule()) {
+        <p class="text-xs text-surface-500 mt-2">
+          This league's playoff tiebreaker isn't supported, so playoff odds break ties by points for.
+        </p>
+      }
+      <!-- Under the standings at their full width on wide screens; below xl, its own page. A wrapper,
+           since the component's own display would override "hidden". -->
+      <div class="hidden xl:block mt-6"><app-power-rankings /></div>
     </section>
 
     <section>

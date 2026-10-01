@@ -448,3 +448,101 @@ Insights beyond custom projections (league-tile odds, probability over time, pro
 - One history request per page load; switching tabs made no new requests.
 - A forced history failure shows ESPN's figures with the "unavailable" note, no FantasyX tag, and the position-averages note on win probability.
 - At 375px the popover fits and the matchup view doesn't overflow. The roster page already overflows at that width, because of its record meter and 7-column table. That predates this change.
+
+---
+
+# v1.8: Power Rankings & Playoff Odds (issue #17) — on `17-add-team-power-rankings-and-playoff-odds`
+
+## Goal
+
+Rank every team by how strong it is rather than by record alone, and show each team's chance of making the playoffs (and of a first-round bye), on the league page and on every roster page.
+
+## Decisions
+
+- **One strength number drives both.** `strength = w·results + (1−w)·roster`, with `w = n / (n + 4)` after `n` completed weeks (`RESULTS_WEIGHT_GAMES`).
+  - **Results:** points-for per completed week, from the schedule.
+  - **Roster:** the current starters' projected total. A starter projected at 0 (bye, ruled out) is swapped for the best bench player at the same position. IR players are never swapped in.
+  - **Projections:** the roster term follows the ESPN / FantasyX setting, and the "FantasyX projections" tag shows on the new columns, card and tiles.
+  - **Week 1:** with no results, it's the roster term only.
+- **Completed weeks only.** A week counts once ESPN moves `currentMatchupPeriod` on (after stat corrections). Rankings and odds change once a week; neither follows live scores. The roster term still reflects the current roster and lineup.
+- **Per-week strength:** each team also gets a strength for every NFL week from this one to the end of the fantasy playoffs: the same results blend, with that week's roster term. This week uses the set lineup. Later weeks use the best lineup the roster (IR aside) can field that week, on that week's projection (lineups get reset, and byes count in the week they fall). A matchup period's strength is the average over its NFL weeks. Before upcoming projections load, or if they fail, every week uses today's strength.
+- **Playoff odds:** a seeded (fixed-seed) Monte Carlo of 10,000 runs of the rest of the regular season, the current week included. Each weekly score is `strength that period + spread·z`, so who you play and when both count. The spread is one league-wide figure: the pooled deviation of each team's weekly scores from its own average, with a fallback of 25 before 3 completed weeks.
+  - Shows **playoff %** and **bye %** (bye only when the league has byes). Title odds are deferred.
+  - **Seeding:** from `mSettings`: the regular-season length (`matchupPeriodCount`), `playoffTeamCount` and `playoffSeedingRule`. `H2H_RECORD` breaks record ties by head-to-head within the tied group, then points for. `TOTAL_POINTS_SCORED` uses points for. Any other rule falls back to points for, with a note under the standings.
+  - **Divisions:** with more than one, each division winner is seeded ahead of every other team.
+  - **Byes:** the bracket is filled to the next power of two (6 teams: 2 byes).
+- **x / y / e tags and 100% / 0%:** once 3 or fewer weeks (and at most 22 games) remain, every remaining win/loss outcome is checked exactly.
+  - **x:** clinched a playoff spot. **y:** clinched a bye. **e:** eliminated.
+  - Points aren't settled yet, so any tie on record counts against the team for x / y and in its favour for e.
+  - Odds read 100% or 0% only when one of those applies. Otherwise they're capped at ">99.9%" / "<0.1%", so the tags and the extremes always appear together.
+  - Odds are hidden once the regular season ends. The power rank stays.
+- **Draft-day ranking:** each team's best lineup from its own draft picks (dropped players included), on ESPN's week 1 projections, ranked the same way. It's shown on its own "Since Draft Day" card (see UI). The lineup is filled most restrictive slot first (e.g. RB before FLEX), each with the best remaining eligible pick. Week 1 is ESPN-only, so this is the same in both projection modes. It's left out before the draft, or if the draft fails to load.
+- **Power score:** each ranking also gives every team a score: its strength as a percentage of the top team's, so 1st is always 100 and a team on 87 projects to score 87% of what the leader does in a week. This Week and Rest of Season each scale to their own leader. The draft-day card stays rank-only.
+- **Rest-of-season ranking:** teams ranked by their average per-week strength from this week through the end of the fantasy playoffs, with an arrow for the places each is ahead of (or behind) its rank this week. It's unavailable if upcoming projections fail.
+- **Remaining schedule:** the average per-period strength of a team's remaining regular-season opponents, in the weeks they meet, ranked 1st (hardest) to last. It's hidden once the regular season is over.
+- **Movement arrow:** today's rank against the rank as of the previous completed week. After week 1, the previous ranking is the draft-day one. That earlier rank uses results through the week before, plus today's rosters with each player's projection for that week from `player-history` (so traded players count for their current team).
+- **UI:**
+  - **Standings:** new Sched (remaining schedule rank, with a tooltip), Playoffs and Bye columns, plus the x / y / e tag beside the team name. No power rank column.
+    - **Phones:** the table scrolls sideways with the seed and team pinned, and the logo is hidden.
+  - **Power Rankings component** (`app-power-rankings`): one parent container headed "Power Rankings" (with the projection-source tag), a bordered panel a shade apart from the page, holding two separate cards stacked. Rows are static.
+    - **This Week / Rest of Season:** one card with a `p-selectbutton` switch. This Week shows rank, weekly movement, team name and score. Rest of Season shows rank, the change against this week ("vs now"), team name and score, with a legend naming the weeks covered. The switch only appears while rest-of-season weeks remain. A legend under the list names the week the ranking is through, what the arrows compare with ("the ranking after week N−1", or the draft-day ranking after week 1), and the current results / roster weighting.
+    - **Since Draft Day** (only with a draft), below it: each team in today's order, with an arrow on a rank track from its draft-day rank to its current one, plus "draft → now". The track runs from last on the left to 1st on the right, so a climb points right (green) and a fall left (red); no change is a grey dot. It's drawn with CSS on each row rather than Chart.js, so it lines up with the list and follows the theme.
+    - On phone-width containers (a container query) the nested padding tightens and the draft-day names narrow, to give the track room.
+    - **`xl` (1280px) and wider:** both cards under the standings, at the table's full width.
+    - **Below `xl`:** a "Power Rankings" button beside the Standings heading goes to `/league/rankings`, which has a Back to League link. The League tab stays active there.
+  - **Roster view:** a larger W-L-T line over the record meter, then three matching tiles: Standing ("6th of 10", moved out of the record line), a power rank tile (rank of N, arrow, "Score 72.5 / 100") and a playoff odds tile (playoff %, tag, bye %, and "Schedule: Nth hardest"). Shown on every team's roster, not just yours. Neither tile does anything when clicked.
+- **Failure:**
+  - `player-history` fails: no arrows, with a note.
+  - `/matchups` fails: results only, with a note.
+  - The league call fails: the league page shows its error and Retry, and the roster tiles are hidden.
+
+## Backend
+
+- `LeagueDto` gains `RegularSeasonMatchupPeriods`, `PlayoffTeamCount`, `PlayoffSeedingRule` and `Schedule`. The schedule is every regular-season matchup as a `ScheduledMatchupDto`: period, home and away team ids, points, and `Winner` ("HOME" / "AWAY" / "TIE" / "UNDECIDED"). It's the whole schedule if ESPN sends no regular-season length.
+- `StandingDto` gains `DivisionId`. `LeagueDto` also gains `ScoringPeriodsByMatchupPeriod` (the NFL weeks in each matchup period, playoffs included).
+- `PlayerHistoryDto` gains `Upcoming`: ESPN's projection for the requested scoring period and every later NFL week (through week 18) projected above 0. The card call now filters to all 18 weeks, and week 1 is no longer short-circuited.
+- `POST /api/espn/draft` takes `{ leagueId, season, espnS2?, swid? }` and returns `DraftDto`:
+  - `Picks`: team id, player id, position and week 1 projection for each pick.
+  - `LineupSlots`: each starting slot's name, count and eligible positions, from `rosterSettings.lineupSlotCounts`. IDP, bench and IR slots are left out (`EspnLookups.StartingSlot`).
+  - It makes one league call (`mDraftDetail`, `mSettings`) and one `kona_playercard` call for every drafted player, filtered to week 1.
+- The ESPN records gain `ScheduleSettings.MatchupPeriodCount`, `PlayoffTeamCount` and `PlayoffSeedingRule`, plus `EspnTeam.DivisionId` and `EspnScheduleEntry.Winner`. They're all nullable, and the league call's views are unchanged.
+
+## Frontend
+
+- `utils/power-rankings.ts` (pure): `powerScores`, `rosterStrength`, `bestLineupTotal` (draft day), `completedScores`, `teamStrength`, `powerRankings`.
+- `utils/playoff-odds.ts` (pure): `playoffOdds` (simulation, seeding and the exact check, run in Gray-code order with an early exit), `weeklySpread`, `byeCount`, `seedingTiebreak`, `formatOdds`. Every tunable constant lives here.
+- `workers/playoff-odds.worker.ts` runs `playoffOdds` off the main thread (`webWorkerTsConfig` in `angular.json`). It runs inline where workers aren't available.
+- `LeagueOutlookService`:
+  - Caches the league for the session. The league page calls `refresh()` on each visit and on Retry; other pages call `ensureLoaded()`.
+  - Reads rosters from `WeekMatchupsService` and history through `ProjectionsService`, and loads the draft once per import.
+  - Exposes `rankings`, `rankOf`, `odds` and `oddsOf`.
+  - Only reruns the odds when strengths (per period included) or the schedule change.
+  - Exposes `restOfSeason` and `scheduleOf`.
+- `ProjectionsService.pastProjectionOf` and `futureProjectionOf`: the active source's projection for a past week (last week's roster term) or an upcoming one (per-week strengths). FantasyX mode applies the bias model to upcoming weeks too.
+- `utils/power-rankings.ts` gains `remainingScheduleStrength`; `OddsTeam` gains `byPeriod`.
+- Components: `PowerRankingsComponent`, `PowerRankingsPageComponent` (`/league/rankings`), and `RankMovementComponent` (shared by the list and the roster tile). `LeagueComponent` now reads the league from the outlook service.
+
+## Verification
+
+1. Vitest: 28 new tests, 64 in total.
+   - Power scores (top team 100, others as a share), strength blend, bench swap and IR rule, the best-lineup fill (flex taken last, empty slots), and remaining schedule strength taken per meeting week.
+   - A team weak in one remaining period loses odds, and its opponent that week gains them.
+   - Seeded simulation: deterministic, a dominant team near 100%, identical teams summing to P with each near P/N.
+   - Exact check on hand-built 4-team leagues: x, e, y, record ties against the team, divisions, and H2H vs points-for tiebreaks.
+2. A worst-case timing for the exact check (14 teams, 21 games left) took about 110 ms in Node.
+3. UI against a mock API (10 teams, week 12 of 14, 6 playoff teams, H2H):
+   - x and e tags with matching 100% / 0%. The odds sum to 6.0.
+   - The bye stays below 100% when a team can still be caught.
+   - Arrows show, in both ESPN and FantasyX modes.
+   - A reversed mock draft gives the expected arrows.
+   - Upcoming projections (one team projected 40% higher from week 13, a QB bye in week 13): that team climbs in Rest of Season and gains bye odds, the Sched column ranks schedules, and the roster tile shows "Schedule: 3rd hardest". The switch toggles both ways on real clicks. At 1400px the container sits under the standings at 776px, in both light and dark themes. At 375px the page shows both cards, with a 113px track and no overflow.
+   - The card shows under the standings at their width (776px) at 1400px, and the button at 1024px.
+   - At 375px: no page overflow, pinned columns opaque on the highlighted row, the rankings route works, and the tiles wrap under the meter.
+4. **Still to do on a live league:**
+   - Confirm ESPN's field names by checking `/api/espn/league` returns non-zero settings (`matchupPeriodCount`, `playoffTeamCount`, `playoffSeedingRule`, `divisionId`, `winner`), and `/api/espn/draft` returns picks and slots (`draftDetail.picks`, `rosterSettings.lineupSlotCounts`), and `/api/espn/player-history` returns `upcoming` weeks beyond next week (whether ESPN projects every remaining week, not only the next one).
+   - Check that the odds look sensible against the standings, and that the tags match ESPN's where it shows them.
+
+## Open questions
+
+- The production build's initial bundle is 1.52 MB, 22 kB over the 1.5 MB warning budget. It's a warning, not an error.
+- Remaining-game ties aren't enumerated by the exact check (W/L only), which only matters in leagues that allow ties.

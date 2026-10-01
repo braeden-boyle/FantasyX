@@ -40,7 +40,11 @@ export class App {
   );
 
   // No tab is active while viewing another team or its matchup (/team/:teamId, /matchup/:teamId) or the import page.
-  protected readonly activeTab = computed(() => this.tabs.find((t) => t.route === this.url())?.route ?? '');
+  // The power rankings page (/league/rankings) belongs to League.
+  protected readonly activeTab = computed(() => {
+    const url = this.url().startsWith('/league/') ? '/league' : this.url();
+    return this.tabs.find((t) => t.route === url)?.route ?? '';
+  });
 
   protected navigate(route: string | number | undefined): void {
     if (typeof route === 'string' && route !== this.url()) {

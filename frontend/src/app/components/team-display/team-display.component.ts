@@ -12,13 +12,19 @@ import { RatingModule } from 'primeng/rating';
 import { ProgressSpinnerModule } from 'primeng/progressspinner';
 import { MessageModule } from 'primeng/message';
 import { ButtonModule } from 'primeng/button';
+import { SkeletonModule } from 'primeng/skeleton';
+import { TooltipModule } from 'primeng/tooltip';
 import { TeamStateService } from '../../services/team-state.service';
 import { EspnApiService } from '../../services/espn-api.service';
 import { ProjectionsService } from '../../services/projections.service';
+import { LeagueOutlookService } from '../../services/league-outlook.service';
 import { ImportTeamRequest, Player, Team } from '../../models/team.model';
 import { PlayerAvatarComponent } from '../player-avatar/player-avatar.component';
 import { PlayerDetailDrawerComponent } from '../player-detail-drawer/player-detail-drawer.component';
 import { ProjectionSourceComponent } from '../projection-source/projection-source.component';
+import { RankMovementComponent } from '../rank-movement/rank-movement.component';
+import { TAG_LABELS, formatOdds } from '../../utils/playoff-odds';
+import { ordinal } from '../../utils/league-format';
 import { formatGameTime, matchupStars, sortStarters, statusSeverity } from '../../utils/player-format';
 
 @Component({
@@ -39,6 +45,9 @@ import { formatGameTime, matchupStars, sortStarters, statusSeverity } from '../.
     PlayerDetailDrawerComponent,
     PlayerAvatarComponent,
     ProjectionSourceComponent,
+    RankMovementComponent,
+    SkeletonModule,
+    TooltipModule,
   ],
   templateUrl: './team-display.component.html',
   styleUrl: './team-display.component.css',
@@ -47,6 +56,11 @@ export class TeamDisplayComponent {
   protected readonly teamState = inject(TeamStateService);
   private readonly espnApi = inject(EspnApiService);
   protected readonly projections = inject(ProjectionsService);
+  private readonly outlook = inject(LeagueOutlookService);
+
+  constructor() {
+    this.outlook.ensureLoaded();
+  }
 
   // Bound from the /team/:teamId route param; absent on plain /team, which means the user's own team.
   readonly teamId = input<string>();
@@ -106,6 +120,30 @@ export class TeamDisplayComponent {
   );
   protected readonly startersPointsTotal = computed(() => this.starters().reduce((sum, p) => sum + p.points, 0));
 
+  // The power rank and playoff odds tiles, for whichever team is showing. Hidden if the league
+  // couldn't be loaded; the odds tile also once the regular season is over.
+  protected readonly showOutlook = computed(() => !this.outlook.error() && this.outlook.rankings()?.status !== 'unavailable');
+  protected readonly powerRank = computed(() => {
+    const team = this.team();
+    return team ? this.outlook.rankOf(team.teamId) : undefined;
+  });
+  protected readonly rankedTeams = computed(() => this.outlook.rankings()?.rankings.length ?? 0);
+  protected readonly showOdds = computed(() => {
+    const odds = this.outlook.odds();
+    return !odds || odds.status === 'loading' || odds.odds !== null;
+  });
+  protected readonly playoffOdds = computed(() => {
+    const team = this.team();
+    return team ? this.outlook.oddsOf(team.teamId) : undefined;
+  });
+  protected readonly formatOdds = formatOdds;
+  protected readonly tagLabels = TAG_LABELS;
+  // How hard the team's remaining regular-season schedule is, ranked across the league.
+  protected readonly remainingSchedule = computed(() => {
+    const team = this.team();
+    return team ? this.outlook.scheduleOf(team.teamId) : undefined;
+  });
+
   protected readonly statusSeverity = statusSeverity;
   protected readonly formatGameTime = formatGameTime;
   protected readonly matchupStars = matchupStars;
@@ -147,16 +185,5 @@ export class TeamDisplayComponent {
     return t.wins + t.losses + t.ties || 1;
   }
 
-  protected standingLabel(t: Team): string | null {
-    if (!t.standingRank || !t.leagueSize) {
-      return null;
-    }
-    return `${this.ordinal(t.standingRank)} of ${t.leagueSize}`;
-  }
-
-  private ordinal(n: number): string {
-    const suffixes: Record<number, string> = { 1: 'st', 2: 'nd', 3: 'rd' };
-    const isTeens = n % 100 >= 11 && n % 100 <= 13;
-    return `${n}${isTeens ? 'th' : (suffixes[n % 10] ?? 'th')}`;
-  }
+  protected readonly ordinal = ordinal;
 }

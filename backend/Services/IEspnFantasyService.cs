@@ -18,4 +18,6 @@ public interface IEspnFantasyService
 
     Task<IReadOnlyList<PlayerHistoryDto>> GetPlayerHistoryAsync(
         PlayerHistoryRequest request, CancellationToken cancellationToken);
+
+    Task<DraftDto> GetDraftAsync(LeagueTeamsRequest request, CancellationToken cancellationToken);
 }

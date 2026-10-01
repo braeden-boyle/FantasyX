@@ -1,8 +1,6 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, computed, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router, RouterLink } from '@angular/router';
-import { toObservable, toSignal } from '@angular/core/rxjs-interop';
-import { catchError, map, of, startWith, switchMap } from 'rxjs';
 import { TableModule } from 'primeng/table';
 import { ChipModule } from 'primeng/chip';
 import { CardModule } from 'primeng/card';
@@ -10,13 +8,17 @@ import { TagModule } from 'primeng/tag';
 import { ProgressSpinnerModule } from 'primeng/progressspinner';
 import { MessageModule } from 'primeng/message';
 import { ButtonModule } from 'primeng/button';
+import { TooltipModule } from 'primeng/tooltip';
+import { SkeletonModule } from 'primeng/skeleton';
 import { TeamStateService } from '../../services/team-state.service';
-import { EspnApiService } from '../../services/espn-api.service';
+import { LeagueOutlookService } from '../../services/league-outlook.service';
 import { ProjectionsService } from '../../services/projections.service';
 import { TeamLogoComponent } from '../team-logo/team-logo.component';
 import { ProjectionSourceComponent } from '../projection-source/projection-source.component';
-import { LeagueTeamsRequest, Matchup, MatchupSide, Standing } from '../../models/team.model';
-import { involves, mineFirst } from '../../utils/league-format';
+import { PowerRankingsComponent } from '../power-rankings/power-rankings.component';
+import { Matchup, MatchupSide, Standing } from '../../models/team.model';
+import { TAG_LABELS, TeamOdds, formatOdds } from '../../utils/playoff-odds';
+import { involves, mineFirst, ordinal } from '../../utils/league-format';
 
 @Component({
   selector: 'app-league',
@@ -33,47 +35,26 @@ import { involves, mineFirst } from '../../utils/league-format';
     ButtonModule,
     TeamLogoComponent,
     ProjectionSourceComponent,
+    PowerRankingsComponent,
+    TooltipModule,
+    SkeletonModule,
   ],
   templateUrl: './league.component.html',
   styleUrl: './league.component.css',
 })
 export class LeagueComponent {
   protected readonly teamState = inject(TeamStateService);
-  private readonly espnApi = inject(EspnApiService);
+  protected readonly outlook = inject(LeagueOutlookService);
   private readonly router = inject(Router);
   private readonly projections = inject(ProjectionsService);
 
   protected readonly myTeamId = this.teamState.myTeamId;
 
-  // Refetched on every visit (and on retry) so standings and live scores are never stale.
-  private readonly reloadCount = signal(0);
-  private readonly leagueRequest = computed<LeagueTeamsRequest | null>(() => {
-    const request = this.teamState.importRequest();
-    if (!request) {
-      return null;
-    }
-    this.reloadCount();
-    const { leagueId, season, espnS2, swid } = request;
-    return { leagueId, season, espnS2, swid };
-  });
-  private readonly leagueLoad = toSignal(
-    toObservable(this.leagueRequest).pipe(
-      switchMap((request) =>
-        request
-          ? this.espnApi.getLeague(request).pipe(
-              map((league) => ({ league, error: null })),
-              catchError((err) => of({ league: null, error: err?.error?.title ?? 'Could not load the league.' })),
-              startWith(null),
-            )
-          : of(null),
-      ),
-    ),
-    { initialValue: null },
-  );
-
-  protected readonly loading = computed(() => this.leagueRequest() !== null && this.leagueLoad() === null);
-  protected readonly errorMessage = computed(() => this.leagueLoad()?.error ?? null);
-  protected readonly league = computed(() => this.leagueLoad()?.league ?? null);
+  // Refetched on every visit (and on retry) so standings and live scores are never stale. The
+  // league is shared with the roster pages' power rank and playoff odds tiles.
+  protected readonly loading = this.outlook.loading;
+  protected readonly errorMessage = this.outlook.error;
+  protected readonly league = this.outlook.league;
   // When the scores were fetched, so in-progress games are judged against the same moment.
   private readonly scoresAsOf = computed(() => {
     this.league();
@@ -86,8 +67,42 @@ export class LeagueComponent {
 
   protected readonly matchups = computed<Matchup[]>(() => mineFirst(this.league()?.matchups ?? [], this.myTeamId()));
 
+  constructor() {
+    this.outlook.refresh();
+  }
+
   protected retry(): void {
-    this.reloadCount.update((n) => n + 1);
+    this.outlook.refresh();
+  }
+
+  // Playoff odds for a standings row; undefined while loading, or once the regular season is over.
+  protected odds(teamId: number): TeamOdds | undefined {
+    return this.outlook.oddsOf(teamId);
+  }
+
+  protected readonly showOdds = computed(() => {
+    const odds = this.outlook.odds();
+    return odds?.status === 'loading' || (odds?.status === 'ready' && odds.odds !== null);
+  });
+  protected readonly oddsLoading = computed(() => this.outlook.odds()?.status === 'loading');
+  protected readonly hasByes = computed(() => {
+    const odds = this.outlook.odds();
+    return odds?.status === 'ready' && (odds.odds?.byes ?? 0) > 0;
+  });
+  protected readonly unsupportedRule = computed(() => {
+    const odds = this.outlook.odds();
+    return odds?.status === 'ready' && odds.odds?.supportedRule === false;
+  });
+
+  protected readonly formatOdds = formatOdds;
+  protected readonly tagLabels = TAG_LABELS;
+
+  // Remaining schedule strength, ranked (1st = hardest); shown while regular-season games remain.
+  protected readonly showSchedule = computed(() => this.outlook.scheduleTeams() > 0);
+
+  protected scheduleRank(teamId: number): string | null {
+    const rank = this.outlook.scheduleOf(teamId)?.rank;
+    return rank ? ordinal(rank) : null;
   }
 
   protected standing(teamId: number): Standing | undefined {
