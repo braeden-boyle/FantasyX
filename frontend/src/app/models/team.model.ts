@@ -31,7 +31,8 @@ export interface Team {
   players: Player[];
 }
 
-// streak is compact, e.g. "W3"; seed is 0 when ESPN hasn't ranked teams yet.
+// streak is compact, e.g. "W3"; seed is 0 when ESPN hasn't ranked teams yet. divisionId is 0 in a
+// league without divisions.
 export interface Standing {
   teamId: number;
   seed: number;
@@ -45,6 +46,7 @@ export interface Standing {
   pointsFor: number;
   pointsAgainst: number;
   streak: string | null;
+  divisionId: number;
 }
 
 export interface MatchupSide {
@@ -58,11 +60,27 @@ export interface Matchup {
   away: MatchupSide;
 }
 
+// One regular-season matchup, played or not. awayTeamId and awayPoints are null for a bye.
+export interface ScheduledMatchup {
+  matchupPeriod: number;
+  homeTeamId: number;
+  awayTeamId: number | null;
+  homePoints: number;
+  awayPoints: number | null;
+  winner: 'HOME' | 'AWAY' | 'TIE' | 'UNDECIDED';
+}
+
+// schedule is every regular-season matchup; a period before currentMatchupPeriod is complete.
+// regularSeasonMatchupPeriods and playoffTeamCount are 0 when ESPN doesn't send them.
 export interface League {
   leagueName: string;
   currentMatchupPeriod: number;
   standings: Standing[];
   matchups: Matchup[];
+  regularSeasonMatchupPeriods: number;
+  playoffTeamCount: number;
+  playoffSeedingRule: string | null;
+  schedule: ScheduledMatchup[];
 }
 
 // points are totals for the whole matchup period; each player's points are for scoringPeriod only.
@@ -93,6 +111,27 @@ export interface MatchupDetail {
   scoringPeriod: number;
   team: MatchupTeam;
   opponent: MatchupTeam | null;
+}
+
+// One draft pick, with the player's week 1 projection (0 when ESPN has none).
+export interface DraftPick {
+  teamId: number;
+  playerId: number;
+  position: string;
+  week1Projection: number;
+}
+
+// A starting lineup slot (bench and IR left out), e.g. FLEX x1 taking RB, WR or TE.
+export interface LineupSlot {
+  slot: string;
+  count: number;
+  eligiblePositions: string[];
+}
+
+// The league's draft, for the draft-day power ranking. picks is empty before the draft.
+export interface Draft {
+  picks: DraftPick[];
+  lineupSlots: LineupSlot[];
 }
 
 export interface TeamSummary {
