@@ -185,12 +185,5 @@ export class TeamDisplayComponent {
     return t.wins + t.losses + t.ties || 1;
   }
 
-  protected standingLabel(t: Team): string | null {
-    if (!t.standingRank || !t.leagueSize) {
-      return null;
-    }
-    return `${this.ordinal(t.standingRank)} of ${t.leagueSize}`;
-  }
-
   protected readonly ordinal = ordinal;
 }

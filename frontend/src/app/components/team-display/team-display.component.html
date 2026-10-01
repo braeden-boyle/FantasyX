@@ -37,67 +37,76 @@
           </a>
         </div>
       </div>
-      <div class="flex flex-col gap-3 w-64 shrink-0">
-      <p-metergroup [value]="recordMeterValues(t)" [max]="recordMeterMax(t)" labelPosition="start">
-        <ng-template #label let-items>
-          <div class="flex items-center gap-3 text-sm mb-1 whitespace-nowrap">
-            @for (item of items; track item.label) {
-              <span class="flex items-center gap-1">
-                <span class="h-2 w-2 rounded-full inline-block" [style.background]="item.color"></span>
-                {{ item.value }} {{ item.label }}
-              </span>
-            }
-            @if (standingLabel(t); as standing) {
-              <span class="text-surface-500">· {{ standing }}</span>
-            }
-          </div>
-        </ng-template>
-      </p-metergroup>
-      @if (showOutlook()) {
-        <div class="grid grid-cols-2 gap-2">
-          <div class="outlook-tile">
-            <span class="outlook-label">Power rank</span>
-            @if (powerRank(); as r) {
-              <span class="flex items-baseline gap-1.5">
-                <span class="outlook-value">{{ ordinal(r.rank) }}</span>
-                <span class="text-xs text-surface-500">of {{ rankedTeams() }}</span>
-                <app-rank-movement [movement]="r.movement" />
-              </span>
-              <span class="text-xs text-surface-500">Score {{ r.score | number: '1.1-1' }} / 100</span>
-            } @else {
-              <p-skeleton width="4rem" height="1.5rem" />
-            }
-          </div>
-          @if (showOdds()) {
-            <div class="outlook-tile">
-              <span class="outlook-label">Playoff odds</span>
-              @if (playoffOdds(); as o) {
-                <span class="flex items-baseline gap-1.5">
-                  <span class="outlook-value">{{ formatOdds(o.playoff, o.clinched || o.eliminated) }}</span>
-                  @if (o.tag) {
-                    <p-tag
-                      [value]="o.tag"
-                      [severity]="o.tag === 'e' ? 'secondary' : 'success'"
-                      styleClass="odds-tag"
-                      [pTooltip]="tagLabels[o.tag]"
-                      [attr.aria-label]="tagLabels[o.tag]"
-                    />
-                  }
+      <!-- The record, then standing, power rank and playoff odds tiles; full width on phones. -->
+      <div class="flex flex-col gap-3 w-full sm:w-[24rem] shrink-0">
+        <p-metergroup [value]="recordMeterValues(t)" [max]="recordMeterMax(t)" labelPosition="start">
+          <ng-template #label let-items>
+            <div class="flex items-center gap-4 text-lg font-medium mb-1 whitespace-nowrap tabular-nums">
+              @for (item of items; track item.label) {
+                <span class="flex items-center gap-1.5">
+                  <span class="h-2.5 w-2.5 rounded-full inline-block" [style.background]="item.color"></span>
+                  {{ item.value }} {{ item.label }}
                 </span>
-                @if (o.bye !== null) {
-                  <span class="text-xs text-surface-500">Bye {{ formatOdds(o.bye, o.clinchedBye || o.byeEliminated) }}</span>
-                }
-                @if (remainingSchedule(); as sched) {
-                  <span class="text-xs text-surface-500">Schedule: {{ ordinal(sched.rank) }} hardest</span>
-                }
+              }
+            </div>
+          </ng-template>
+        </p-metergroup>
+        <div class="grid grid-cols-3 gap-2">
+          @if (t.standingRank && t.leagueSize) {
+            <div class="outlook-tile">
+              <span class="outlook-label">Standing</span>
+              <span class="flex items-baseline gap-1.5">
+                <span class="outlook-value">{{ ordinal(t.standingRank) }}</span>
+                <span class="text-xs text-surface-500">of {{ t.leagueSize }}</span>
+              </span>
+            </div>
+          }
+          @if (showOutlook()) {
+            <div class="outlook-tile">
+              <span class="outlook-label">Power rank</span>
+              @if (powerRank(); as r) {
+                <span class="flex items-baseline gap-1.5">
+                  <span class="outlook-value">{{ ordinal(r.rank) }}</span>
+                  <span class="text-xs text-surface-500">of {{ rankedTeams() }}</span>
+                  <app-rank-movement [movement]="r.movement" />
+                </span>
+                <span class="text-xs text-surface-500">Score {{ r.score | number: '1.1-1' }} / 100</span>
               } @else {
                 <p-skeleton width="4rem" height="1.5rem" />
               }
             </div>
+            @if (showOdds()) {
+              <div class="outlook-tile">
+                <span class="outlook-label">Playoff odds</span>
+                @if (playoffOdds(); as o) {
+                  <span class="flex items-baseline gap-1.5">
+                    <span class="outlook-value">{{ formatOdds(o.playoff, o.clinched || o.eliminated) }}</span>
+                    @if (o.tag) {
+                      <p-tag
+                        [value]="o.tag"
+                        [severity]="o.tag === 'e' ? 'secondary' : 'success'"
+                        styleClass="odds-tag"
+                        [pTooltip]="tagLabels[o.tag]"
+                        [attr.aria-label]="tagLabels[o.tag]"
+                      />
+                    }
+                  </span>
+                  @if (o.bye !== null) {
+                    <span class="text-xs text-surface-500">Bye {{ formatOdds(o.bye, o.clinchedBye || o.byeEliminated) }}</span>
+                  }
+                  @if (remainingSchedule(); as sched) {
+                    <span class="text-xs text-surface-500">Schedule: {{ ordinal(sched.rank) }} hardest</span>
+                  }
+                } @else {
+                  <p-skeleton width="4rem" height="1.5rem" />
+                }
+              </div>
+            }
           }
         </div>
-        <app-projection-source />
-      }
+        @if (showOutlook()) {
+          <app-projection-source />
+        }
       </div>
     </div>
 

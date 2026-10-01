@@ -490,7 +490,7 @@ Rank every team by how strong it is rather than by record alone, and show each t
     - On phone-width containers (a container query) the nested padding tightens and the draft-day names narrow, to give the track room.
     - **`xl` (1280px) and wider:** both cards under the standings, at the table's full width.
     - **Below `xl`:** a "Power Rankings" button beside the Standings heading goes to `/league/rankings`, which has a Back to League link. The League tab stays active there.
-  - **Roster view:** under the W-L-T meter, a power rank tile (rank of N, arrow, "Score 72.5 / 100") and a playoff odds tile (playoff %, tag, bye %, and "Schedule: Nth hardest"). Shown on every team's roster, not just yours. Neither tile does anything when clicked.
+  - **Roster view:** a larger W-L-T line over the record meter, then three matching tiles: Standing ("6th of 10", moved out of the record line), a power rank tile (rank of N, arrow, "Score 72.5 / 100") and a playoff odds tile (playoff %, tag, bye %, and "Schedule: Nth hardest"). Shown on every team's roster, not just yours. Neither tile does anything when clicked.
 - **Failure:**
   - `player-history` fails: no arrows, with a note.
   - `/matchups` fails: results only, with a note.
