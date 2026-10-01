@@ -115,6 +115,22 @@ export class ProjectionsService {
     };
   });
 
+  // The active source's projection for a player in a past week, from their history: 0 for a week
+  // they didn't play. For power rankings' movement (last week's roster strength). Null until the
+  // history has loaded.
+  readonly pastProjectionOf = computed<((player: Player, week: number) => number) | null>(() => {
+    const load = this.load();
+    if (load?.status !== 'ready') return null;
+    const model = this.fantasyX() ? load.model : null;
+    return (p: Player, week: number) => {
+      const played = load.histories.get(p.playerId)?.find((w) => w.week === week);
+      if (!played) return 0;
+      return model
+        ? model.project(p.playerId, p.position, week, played.projected, played.opponentPositionRank)
+        : played.projected;
+    };
+  });
+
   // A team's roster and score from the week the projections were built from.
   weekTeam(teamId: number): MatchupTeam | undefined {
     return this.load()?.week?.teams.find((t) => t.team.teamId === teamId);

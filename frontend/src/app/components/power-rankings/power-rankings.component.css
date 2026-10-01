@@ -1,0 +1,187 @@
+/* The host is the size container, so the draft-day rows can narrow on a phone-width card. */
+:host {
+  display: block;
+  container-type: inline-size;
+}
+
+/* The parent container both rankings sit in, so they read as one group: a bordered panel a shade
+   apart from the page, with the cards inside it. */
+.rankings-group {
+  padding: 1rem;
+  border: 1px solid var(--p-content-border-color);
+  border-radius: var(--p-card-border-radius, 0.75rem);
+  background: var(--p-content-hover-background);
+}
+
+/* On a phone-width container the nested padding is tightened, so the draft-day track keeps room. */
+@container (max-width: 28rem) {
+  .rankings-group {
+    padding: 0.5rem;
+  }
+
+  :host ::ng-deep .rankings-group .p-card-body {
+    padding: 0.75rem;
+  }
+}
+
+.card-title {
+  font-size: 1rem;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+}
+
+.rankings-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+/* Rank, movement and name in fixed columns so the names line up. */
+.rankings-row {
+  display: grid;
+  grid-template-columns: 1.75rem 2.5rem minmax(0, 1fr);
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.375rem 0.5rem;
+}
+
+.rankings-row + .rankings-row,
+.draft-row + .draft-row {
+  border-top: 1px solid var(--p-content-border-color);
+}
+
+.rankings-row-mine {
+  background: var(--p-highlight-background);
+}
+
+.rank {
+  font-weight: 600;
+  text-align: right;
+  padding-right: 0.25rem;
+}
+
+/* Name, rank track and "draft → now", with the track taking the spare width. */
+.draft-row {
+  display: grid;
+  grid-template-columns: minmax(0, 8rem) minmax(0, 1fr) 3.5rem;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.375rem 0.5rem;
+}
+
+/* On a phone-width card, names give up some room to the track. */
+@container (max-width: 28rem) {
+  .draft-row {
+    grid-template-columns: minmax(0, 6.5rem) minmax(0, 1fr) 3.25rem;
+    gap: 0.5rem;
+  }
+}
+
+/* Column labels for this week's list and the draft track's axis. */
+.list-header,
+.draft-axis {
+  height: 1.25rem;
+  padding-top: 0;
+  padding-bottom: 0;
+  font-size: 0.6875rem;
+  color: var(--p-text-muted-color);
+}
+
+
+/* The rank axis runs from last on the left to 1st on the right, so a climb points right. */
+.track {
+  position: relative;
+  height: 1.25rem;
+}
+
+.track::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  border-top: 1px dashed var(--p-content-border-color);
+}
+
+.arrow {
+  position: absolute;
+  top: calc(50% - 1px);
+  height: 2px;
+  min-width: 2px;
+  background: currentColor;
+}
+
+/* The tail is a dot at the draft-day rank; the head a triangle at the current one. */
+.arrow::before,
+.arrow::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.arrow::before {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.arrow::after {
+  border-top: 5px solid transparent;
+  border-bottom: 5px solid transparent;
+}
+
+.arrow-up {
+  color: var(--p-green-600);
+}
+
+.arrow-up::before {
+  left: -3px;
+}
+
+.arrow-up::after {
+  right: -6px;
+  border-left: 7px solid currentColor;
+}
+
+.arrow-down {
+  color: var(--p-red-600);
+}
+
+.arrow-down::before {
+  right: -3px;
+}
+
+.arrow-down::after {
+  left: -6px;
+  border-right: 7px solid currentColor;
+}
+
+.dot {
+  position: absolute;
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--p-text-muted-color);
+  transform: translate(-50%, -50%);
+}
+
+.draft-ranks {
+  font-size: 0.8125rem;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.legend {
+  margin-top: 0.5rem;
+  font-size: 0.8125rem;
+  color: var(--p-text-muted-color);
+}
+
+.note {
+  margin-top: 0.5rem;
+  font-size: 0.75rem;
+  color: var(--p-text-muted-color);
+}
