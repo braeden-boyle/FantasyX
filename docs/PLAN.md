@@ -578,7 +578,10 @@ FantasyX's own ranking of every player who matters in the league, rostered or av
   - A failed run shows red in Actions and emails the repo owner. It can be re-run by hand (`workflow_dispatch`). A re-run later in the week is still saved, and `CreatedAtUtc` shows when it was taken.
 - **UI:**
   - **Players tab** (`/players`) after League in the header nav, icon-only on phones like the others.
-    - A `p-table` with columns, in order: rank, player (avatar, name, position · NFL team, injury tag), this week's projection (active source), this week's points so far, season average, value, ROS, and last the fantasy team (logo and abbreviation, or an **FA** / **WA** tag). This week's points are as of when the rosters loaded, like the rest of the rankings.
+    - A `p-table`. Both rankings start with rank and player (avatar, name, position · NFL team, injury tag) and end with the fantasy team (logo and abbreviation, or an **FA** / **WA** tag). In between:
+      - **This Week:** the NFL opponent ("vs KC", "@ KC" or BYE), a Matchup star rating (the same 1–5 stars as the roster view, from the opponent's current rank against the position), this week's projection (active source), points so far, season average, and value.
+      - **Rest of Season:** two strength-of-schedule columns as stars, **ROS SOS** over every remaining week of the window, playoffs included, and **Playoff SOS** over the fantasy playoff weeks alone (hidden when ESPN doesn't give the regular season's length). Each is the opponents' average rank against the position, byes and unranked opponents left out. Then ROS points, value, and season average.
+      - Added after the first build. This week's points are as of when the rosters loaded, like the rest of the rankings.
     - A **This Week / Rest of Season** switch (`p-selectbutton`, Rest of Season by default). This Week ranks the same way over a one-week window: value is this week's projection over this week's replacement level, position ranks follow this week's projection, and the ROS column is hidden (it would repeat Proj). Snapshots and the drawer stay rest of season. Added after the first build.
     - No position rank column (dropped after the first build): filtered to one position, the # column shows the rank at that position instead (the WR1 reads 1 whatever their overall rank). All and FLEX show the overall rank. The drawer still shows the position rank.
     - Filters: position (`p-selectbutton`: All, each position in the league's slots, and FLEX), availability (All / Rostered / Available), and a name search. Sorted by value by default, and every column can be sorted.
@@ -600,6 +603,7 @@ FantasyX's own ranking of every player who matters in the league, rostered or av
   - Identity, matching `PlayerDto`: `PlayerId`, `FullName`, `Position`, `ProTeam`, `InjuryStatus`, `HeadshotUrl`, `IsTeamLogo`.
   - `Status` ("FREEAGENT" / "WAIVERS"), `PercentOwned`, and `Points`: what they've scored in the requested scoring period so far.
   - `Weeks` and `Upcoming`, in `PlayerHistoryDto`'s shape and under the same rules, so the frontend models them the same way.
+  - `Schedule` (also added to `PlayerHistoryDto`): the current NFL team's games from the scoring period through week 18, each with the opponent, home/away and the opponent's current rank against the player's position. It drives the matchup and strength-of-schedule columns.
 - **ESPN call, to confirm first (spike):** for each position, one `kona_player_info` call with an `x-fantasy-filter` of `filterStatus` FREEAGENT + WAIVERS, `filterSlotIds` for that position, `sortPercOwned` descending, `limit` = `perPosition`, and `filterStatsForScoringPeriodIds` 1–18. v1.6 found that ESPN answers 400 to `limit` on a `kona_playercard` call filtered by `filterIds`. This view and filter are different, but check it first.
   - If `kona_player_info` returns no weekly stats, fall back to two steps: those calls for ids only, then the existing `player-history` path for those ids.
   - Either way, the per-week mapping (actuals, projections, opponent rank via `GameFor`) is pulled out of `GetPlayerHistory` into a helper both endpoints share.
@@ -645,7 +649,7 @@ FantasyX's own ranking of every player who matters in the league, rostered or av
 
 1. **Spike:** the `kona_player_info` call on a live league. Confirm that `limit` is accepted, the pool is sorted by percent owned, waiver players are included, and weekly stats and projections come back. Then confirm that the merged response has at least `REPLACEMENT_DEPTH` + 10 unrostered players at every starting position, K and D/ST included. Record the result in this section before building the rest of the endpoint.
    - **Result so far (2026-10-05), on ESPN's default player pool** (`leaguedefaults/3`, which needs no league): `limit` is accepted (5 and 100 came back exactly), the list is sorted by percent owned, `status` (FREEAGENT / WAIVERS) is on each entry, and every player has weekly actuals and projections (`statSplitTypeId` 1) for weeks 1–18. A bye week comes back as a 0 projection. That pool has all 32 D/STs. `mPositionalRatings` returns nothing there, since it isn't a league. So the single-step call was built, without the two-step fallback.
-   - **Still to confirm on a live league:** that waiver players come back alongside free agents, that `positionAgainstOpponent` comes back with `kona_player_info`, and the unrostered count at every position (K and D/ST included).
+   - **Confirmed on the live 14-team league (2026-10-05, week 4):** waiver players come back alongside free agents (on a Monday most are on waivers), `positionAgainstOpponent` comes back with `kona_player_info` (free agents get opponent ranks), and every position has at least `REPLACEMENT_DEPTH` + 10 unrostered players: 50 at QB, RB, WR and TE, 44 at K and 17 at D/ST.
 2. **Vitest:**
    - ROS sums over the right weeks, with byes as 0.
    - The starter count for a standard league (QB 1, RB 2, WR 2, TE 1, FLEX 1, 10 teams): the flex goes to the best remaining RB/WR/TE.
@@ -712,6 +716,6 @@ FantasyX's own ranking of every player who matters in the league, rostered or av
   - A second run wrote nothing.
   - A wrong key exits 1, and so does an available-players failure (after 3 retries). Loading the Players page made no snapshot calls.
 - **Still to do on a live league:**
-  - The spike's remaining checks (above).
   - Step 3: the top 10 at each position against ESPN's rest-of-season rankings, with the rank correlation recorded here, and replacement levels against the best waiver players.
   - A capture run against the real league. Then, after merging, the repo secrets and one manual workflow run.
+- **Live league, after the schedule columns (2026-10-05):** both views show real opponents and stars, for K and D/ST too. This week's opponent and stars match the roster view for all 15 players on a roster, a D/ST and a bye included.
