@@ -68,6 +68,14 @@ public class EspnFantasyController : ControllerBase
         return Ok(history);
     }
 
+    [HttpPost("available-players")]
+    public async Task<ActionResult<IReadOnlyList<AvailablePlayerDto>>> GetAvailablePlayers(
+        AvailablePlayersRequest request, CancellationToken cancellationToken)
+    {
+        var players = await _espnFantasyService.GetAvailablePlayersAsync(request, cancellationToken);
+        return Ok(players);
+    }
+
     [HttpPost("draft")]
     public async Task<ActionResult<DraftDto>> GetDraft(LeagueTeamsRequest request, CancellationToken cancellationToken)
     {

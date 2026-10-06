@@ -90,8 +90,23 @@ public class EspnFantasyService : IEspnFantasyService
             regularSeasonPeriods,
             scheduleSettings?.PlayoffTeamCount ?? 0,
             scheduleSettings?.PlayoffSeedingRule,
-            schedule);
+            schedule,
+            StartingLineupSlots(league));
     }
+
+    // The league's starting slots from mSettings, with how many of each a lineup has and the
+    // positions that can fill them. IDP, bench and IR slots are left out (EspnLookups.StartingSlot).
+    private static List<LineupSlotDto> StartingLineupSlots(EspnLeagueResponse league) =>
+        (league.Settings?.RosterSettings?.LineupSlotCounts ?? [])
+            .Select(entry => (Id: int.TryParse(entry.Key, out var id) ? id : -1, Count: entry.Value))
+            .Where(entry => entry.Count > 0 && EspnLookups.StartingSlot(entry.Id) is not null)
+            .OrderBy(entry => entry.Id)
+            .Select(entry =>
+            {
+                var (name, positions) = EspnLookups.StartingSlot(entry.Id)!.Value;
+                return new LineupSlotDto(name, entry.Count, positions);
+            })
+            .ToList();
 
     // Logos a manager uploaded (rather than picked from ESPN's presets) are served from this host,
     // which 401s without the league's cookies, so the browser can't load them directly.
@@ -490,15 +505,102 @@ public class EspnFantasyService : IEspnFantasyService
             .ToDictionary(player => player.Id) ?? [];
 
         return playerIds
-            .Select(id => playersById.TryGetValue(id, out var player)
-                ? ToPlayerHistoryDto(
+            .Select(id =>
+            {
+                if (!playersById.TryGetValue(id, out var player))
+                {
+                    return new PlayerHistoryDto(id, [], []);
+                }
+
+                var (weeks, upcoming) = PlayerWeeks(
                     player,
                     request.Season,
                     request.ScoringPeriod,
                     schedules.FirstOrDefault(team => team.Id == player.ProTeamId),
                     gamesById,
-                    response.PositionAgainstOpponent)
-                : new PlayerHistoryDto(id, [], []))
+                    response.PositionAgainstOpponent);
+                return new PlayerHistoryDto(id, weeks, upcoming);
+            })
+            .ToList();
+    }
+
+    private static readonly string[] AvailableStatuses = ["FREEAGENT", "WAIVERS"];
+
+    public async Task<IReadOnlyList<AvailablePlayerDto>> GetAvailablePlayersAsync(
+        AvailablePlayersRequest request, CancellationToken cancellationToken)
+    {
+        var slotIds = request.Positions
+            .Distinct()
+            .Select(position => EspnLookups.PositionSlotId(position)
+                ?? throw new EspnApiException(HttpStatusCode.BadRequest, $"Unknown position \"{position}\"."))
+            .ToList();
+
+        // One call per position, so low-owned positions (K, D/ST) and deep leagues still get their
+        // full share, rather than one league-wide list by percent owned. Each is ESPN's free-agent
+        // list for that position, most owned first, with every week of stats like the player card.
+        var poolTasks = slotIds
+            .Select(slotId => FetchLeagueAsync<EspnPlayerInfoResponse>(
+                request.LeagueId,
+                request.Season,
+                ["kona_player_info", "mPositionalRatings"],
+                request.EspnS2,
+                request.Swid,
+                JsonSerializer.Serialize(new
+                {
+                    players = new
+                    {
+                        filterStatus = new { value = AvailableStatuses },
+                        filterSlotIds = new { value = new[] { slotId } },
+                        sortPercOwned = new { sortPriority = 1, sortAsc = false },
+                        limit = request.PerPosition,
+                        filterStatsForScoringPeriodIds = new { value = Enumerable.Range(1, RegularSeasonWeeks).ToArray() },
+                    },
+                }),
+                cancellationToken))
+            .ToList();
+        var schedulesTask = FetchProTeamSchedulesAsync(request.Season, cancellationToken);
+        await Task.WhenAll(poolTasks.Cast<Task>().Append(schedulesTask));
+
+        var pools = poolTasks.Select(task => task.Result).ToList();
+        var positionalRatings = pools.Select(pool => pool.PositionAgainstOpponent).FirstOrDefault(r => r is not null);
+        var schedules = await schedulesTask;
+        var gamesById = GamesById(schedules);
+
+        // A player eligible at two positions (e.g. RB and WR) can come back from both calls.
+        return pools
+            .SelectMany(pool => pool.Players ?? [])
+            .Where(entry => entry.Status is null || AvailableStatuses.Contains(entry.Status))
+            .DistinctBy(entry => entry.Player.Id)
+            .Select(entry =>
+            {
+                var player = entry.Player;
+                var isTeamDefense = EspnLookups.IsDefenseSpecialTeams(player.DefaultPositionId);
+                var (weeks, upcoming) = PlayerWeeks(
+                    player,
+                    request.Season,
+                    request.ScoringPeriod,
+                    schedules.FirstOrDefault(team => team.Id == player.ProTeamId),
+                    gamesById,
+                    positionalRatings);
+                return new AvailablePlayerDto(
+                    player.Id,
+                    isTeamDefense ? EspnLookups.TeamDefenseName(player.FullName) : player.FullName,
+                    EspnLookups.PositionName(player.DefaultPositionId),
+                    EspnLookups.ProTeamAbbrev(player.ProTeamId),
+                    player.InjuryStatus,
+                    isTeamDefense ? EspnLookups.TeamLogoUrl(player.ProTeamId) : EspnLookups.HeadshotUrl(player.Id),
+                    isTeamDefense,
+                    entry.Status ?? "FREEAGENT",
+                    player.Ownership?.PercentOwned ?? 0,
+                    player.Stats?
+                        .FirstOrDefault(stat => stat.SeasonId == request.Season
+                            && stat.ScoringPeriodId == request.ScoringPeriod
+                            && stat.StatSourceId == 0
+                            && stat.StatSplitTypeId == 1)?
+                        .AppliedTotal ?? 0,
+                    weeks,
+                    upcoming);
+            })
             .ToList();
     }
 
@@ -511,16 +613,7 @@ public class EspnFantasyService : IEspnFantasyService
         var league = await FetchLeagueAsync<EspnLeagueResponse>(
             request.LeagueId, request.Season, ["mDraftDetail", "mSettings"], request.EspnS2, request.Swid, null, cancellationToken);
 
-        var lineupSlots = (league.Settings?.RosterSettings?.LineupSlotCounts ?? [])
-            .Select(entry => (Id: int.TryParse(entry.Key, out var id) ? id : -1, Count: entry.Value))
-            .Where(entry => entry.Count > 0 && EspnLookups.StartingSlot(entry.Id) is not null)
-            .OrderBy(entry => entry.Id)
-            .Select(entry =>
-            {
-                var (name, positions) = EspnLookups.StartingSlot(entry.Id)!.Value;
-                return new LineupSlotDto(name, entry.Count, positions);
-            })
-            .ToList();
+        var lineupSlots = StartingLineupSlots(league);
 
         var picks = league.DraftDetail?.Picks?
             .Where(pick => pick.PlayerId != 0 && pick.TeamId != 0)
@@ -565,11 +658,13 @@ public class EspnFantasyService : IEspnFantasyService
             lineupSlots);
     }
 
-    // Only weeks with an actual and a projection above 0 count. ESPN zeroes the projection of a
-    // player ruled out and still sends a 0-point actual, so without that check a missed game reads
-    // as a perfect prediction and makes the player look steadier than they are. A late scratch who
-    // was still projected does count, as a real miss.
-    private static PlayerHistoryDto ToPlayerHistoryDto(
+    // A player's played weeks before currentWeek and ESPN's projection for each week from it on,
+    // shared by player-history and available-players. Only weeks with an actual and a projection
+    // above 0 count. ESPN zeroes the projection of a player ruled out and still sends a 0-point
+    // actual, so without that check a missed game reads as a perfect prediction and makes the
+    // player look steadier than they are. A late scratch who was still projected does count, as a
+    // real miss.
+    private static (List<PlayerHistoryWeekDto> Weeks, List<PlayerProjectionWeekDto> Upcoming) PlayerWeeks(
         EspnPlayer player,
         int season,
         int currentWeek,
@@ -608,7 +703,7 @@ public class EspnFantasyService : IEspnFantasyService
             .Select(entry => new PlayerProjectionWeekDto(entry.Key, entry.Value.AppliedTotal!.Value))
             .ToList();
 
-        return new PlayerHistoryDto(player.Id, weeks, upcoming);
+        return (weeks, upcoming);
     }
 
     // A played week is matched to its game by id rather than by the player's current team's

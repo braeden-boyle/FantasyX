@@ -76,8 +76,17 @@ public record EspnRosterEntry(int PlayerId, int LineupSlotId, EspnPlayerPoolEntr
 
 public record EspnPlayerPoolEntry(EspnPlayer Player);
 
+// Ownership is league-wide (across ESPN), not this league's; sent with "kona_player_info".
 public record EspnPlayer(
-    int Id, string FullName, int DefaultPositionId, int ProTeamId, string? InjuryStatus, List<EspnPlayerStat>? Stats);
+    int Id,
+    string FullName,
+    int DefaultPositionId,
+    int ProTeamId,
+    string? InjuryStatus,
+    List<EspnPlayerStat>? Stats,
+    EspnOwnership? Ownership);
+
+public record EspnOwnership(double? PercentOwned);
 
 // statSourceId 0 = actual, 1 = projected; statSplitTypeId 0 = season total, 1 = single week.
 // ESPN ignores season filters, so SeasonId is needed to drop last season's entries. For weekly actuals,
