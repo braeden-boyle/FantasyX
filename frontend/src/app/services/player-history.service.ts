@@ -2,13 +2,14 @@ import { Injectable, inject } from '@angular/core';
 import { Observable, map, shareReplay, throwError } from 'rxjs';
 import { EspnApiService } from './espn-api.service';
 import { TeamStateService } from './team-state.service';
-import { HistoryWeek, ImportTeamRequest, WeekMatchups } from '../models/team.model';
+import { HistoryWeek, ImportTeamRequest, PlayerHistory, WeekMatchups } from '../models/team.model';
 
 // Each player's played weeks, and their projection by upcoming week (missing for a week they're
-// not projected).
+// not projected), plus the response as it came, for player rankings.
 export interface HistoryAndUpcoming {
   histories: Map<number, HistoryWeek[]>;
   upcoming: Map<number, ReadonlyMap<number, number>>;
+  players: PlayerHistory[];
 }
 
 // Session cache of every rostered player's weekly points against ESPN's projection this season,
@@ -45,6 +46,7 @@ export class PlayerHistoryService {
             upcoming: new Map(
               histories.map((h) => [h.playerId, new Map(h.upcoming.map((u) => [u.week, u.projected] as const))] as const),
             ),
+            players: histories,
           })),
           shareReplay(1),
         );

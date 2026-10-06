@@ -20,10 +20,12 @@
             </div>
             <span class="text-sm text-surface-500">
               {{ p.position }} · {{ p.proTeam }}
-              @if (p.opponent) {
-                · This week {{ p.opponentIsHome ? 'vs' : '@' }} {{ p.opponent }}, {{ formatGameTime(p.gameTimeUtc) }}
-              } @else {
-                · Bye this week
+              @if (thisWeek(); as w) {
+                @if (w.opponent) {
+                  · This week {{ w.isHome ? 'vs' : '@' }} {{ w.opponent }}, {{ formatGameTime(w.gameTimeUtc) }}
+                } @else {
+                  · Bye this week
+                }
               }
             </span>
           </div>
@@ -99,6 +101,31 @@
             <span class="stat-value">{{ (restOfSeasonProjection() | number: '1.0-0') ?? '—' }}</span>
           </div>
         </div>
+
+        <!-- FantasyX's player ranking, from the Players page. -->
+        @switch (playerRankings.status()) {
+          @case ('ready') {
+            @if (ranking(); as r) {
+              <p class="text-sm">
+                FantasyX rank <span class="font-semibold">{{ ordinal(r.rank) }}</span>
+                · <span class="font-semibold">{{ r.position }}{{ r.positionRank }}</span>
+                · Value <span class="font-semibold">{{ signed(r.value) }}</span>
+                <i
+                  class="pi pi-info-circle text-xs text-surface-500"
+                  tabindex="0"
+                  aria-label="About the FantasyX rank"
+                  pTooltip="Ranked by value: how many more points the player is projected to score the rest of the season, through the fantasy playoffs, than a replacement-level player at the same position."
+                  tooltipPosition="top"
+                ></i>
+              </p>
+            } @else {
+              <p class="text-sm text-surface-500">Not ranked</p>
+            }
+          }
+          @case ('loading') {
+            <p-skeleton width="16rem" height="1.25rem" />
+          }
+        }
 
         <app-projection-source class="self-start" />
 

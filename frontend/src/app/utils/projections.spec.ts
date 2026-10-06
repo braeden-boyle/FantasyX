@@ -8,6 +8,7 @@ import {
   playerBias,
   rankOffset,
   residuals,
+  upcomingProjection,
 } from './projections';
 
 // Deterministic noise, so the backtests below are stable.
@@ -146,5 +147,22 @@ describe('backtest', () => {
       biasRank: { mae: 0, rmse: 0 },
       playerWeeks: 0,
     });
+  });
+});
+
+describe('upcomingProjection', () => {
+  const history = [week(1, 30, 10), week(2, 30, 10)];
+
+  it('is ESPN’s as it is in ESPN mode', () => {
+    expect(upcomingProjection('espn', 12, history, 5)).toBe(12);
+  });
+
+  it('adds the player’s own bias in FantasyX mode, from weeks before the one projected', () => {
+    expect(upcomingProjection('fantasyx', 12, history, 5)).toBeCloseTo(12 + playerBias(history, 5));
+    expect(upcomingProjection('fantasyx', 12, history, 2)).toBeCloseTo(12 + playerBias(history, 2));
+  });
+
+  it('keeps a week ESPN doesn’t project at 0', () => {
+    expect(upcomingProjection('fantasyx', 0, history, 5)).toBe(0);
   });
 });

@@ -28,6 +28,9 @@ export const USE_RANK_TERM = false;
 
 const RANKED_TEAMS = 32;
 
+// Which projections every figure shows: ESPN's, or FantasyX's own.
+export type ProjectionSource = 'espn' | 'fantasyx';
+
 export type PlayerHistories = ReadonlyMap<number, readonly HistoryWeek[]>;
 export type PlayerPositions = ReadonlyMap<number, string>;
 
@@ -69,6 +72,19 @@ export function customProjection(espn: number, bias: number, slope: number, rank
   if (espn <= 0) return 0;
   const offset = rankOffset(rank);
   return Math.max(0, espn + bias + (offset === null ? 0 : slope * offset));
+}
+
+// The active source's projection for one of a player's upcoming weeks, from ESPN's for that week
+// and the player's own history: ESPN's as it is, or in FantasyX mode with the player's bias added.
+// The bias is per player, so any player's own weeks are enough, free agents included. Upcoming
+// weeks have no opponent rank to go on, so the rank term never applies.
+export function upcomingProjection(
+  source: ProjectionSource,
+  espn: number,
+  history: readonly HistoryWeek[],
+  week: number,
+): number {
+  return source === 'fantasyx' ? customProjection(espn, playerBias(history, week), 0, null) : espn;
 }
 
 export interface FantasyXModel {

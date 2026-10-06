@@ -3,6 +3,8 @@ import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from '../../environments/environment';
 import {
+  AvailablePlayer,
+  AvailablePlayersRequest,
   Draft,
   ImportTeamRequest,
   League,
@@ -44,6 +46,10 @@ export class EspnApiService {
 
   getPlayerHistory(request: PlayerHistoryRequest): Observable<PlayerHistory[]> {
     return this.http.post<PlayerHistory[]>(`${this.baseUrl}/player-history`, request);
+  }
+
+  getAvailablePlayers(request: AvailablePlayersRequest): Observable<AvailablePlayer[]> {
+    return this.http.post<AvailablePlayer[]>(`${this.baseUrl}/available-players`, request);
   }
 
   getDraft(request: LeagueTeamsRequest): Observable<Draft> {

@@ -74,6 +74,7 @@ export interface ScheduledMatchup {
 // scoringPeriodsByMatchupPeriod lists the NFL weeks in each matchup period, keyed by period as a
 // string, playoffs included (a playoff round can span two weeks).
 // regularSeasonMatchupPeriods and playoffTeamCount are 0 when ESPN doesn't send them.
+// lineupSlots are the starting slots (bench, IR and IDP left out).
 export interface League {
   leagueName: string;
   currentMatchupPeriod: number;
@@ -84,6 +85,7 @@ export interface League {
   playoffTeamCount: number;
   playoffSeedingRule: string | null;
   schedule: ScheduledMatchup[];
+  lineupSlots: LineupSlot[];
 }
 
 // points are totals for the whole matchup period; each player's points are for scoringPeriod only.
@@ -178,6 +180,57 @@ export interface PlayerHistory {
   playerId: number;
   weeks: HistoryWeek[];
   upcoming: { week: number; projected: number }[];
+}
+
+export interface AvailablePlayersRequest extends LeagueTeamsRequest {
+  scoringPeriod: number;
+  positions: string[];
+  perPosition: number;
+}
+
+// A free agent or waiver player from POST /api/espn/available-players. weeks and upcoming follow
+// PlayerHistory's rules. percentOwned is across all of ESPN, not this league. points is what they've
+// scored in the requested scoring period so far.
+export interface AvailablePlayer {
+  playerId: number;
+  fullName: string;
+  position: string;
+  proTeam: string;
+  injuryStatus: string | null;
+  headshotUrl: string;
+  isTeamLogo: boolean;
+  status: 'FREEAGENT' | 'WAIVERS';
+  percentOwned: number;
+  points: number;
+  weeks: HistoryWeek[];
+  upcoming: { week: number; projected: number }[];
+}
+
+// One ranked player in a saved snapshot. fantasyTeamId is null unless status is 'ROSTERED';
+// weeklyProjections maps each week of the snapshot's window to points.
+export interface PlayerRankingSnapshotEntry {
+  playerId: number;
+  position: string;
+  fantasyTeamId: number | null;
+  status: 'ROSTERED' | 'FREEAGENT' | 'WAIVERS';
+  rank: number;
+  positionRank: number;
+  restOfSeasonPoints: number;
+  value: number;
+  weeklyProjections: Record<number, number>;
+}
+
+// A league's player rankings for one scoring period and projection source, as the capture workflow
+// saves them (POST /api/player-ranking-snapshots). replacementLevels maps position to points.
+export interface PlayerRankingSnapshotRequest {
+  leagueId: number;
+  season: number;
+  scoringPeriod: number;
+  projectionSource: 'ESPN' | 'FANTASYX';
+  firstWeek: number;
+  lastWeek: number;
+  replacementLevels: Record<string, number>;
+  entries: PlayerRankingSnapshotEntry[];
 }
 
 export type PlayerGameStatus = 'Played' | 'DidNotPlay' | 'Bye' | 'Upcoming';

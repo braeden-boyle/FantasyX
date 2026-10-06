@@ -1,0 +1,297 @@
+@if (!teamState.importRequest()) {
+  <div class="max-w-xl mx-auto mt-10 p-4 text-center text-surface-500">
+    No team imported yet. <a routerLink="/import" class="text-primary-600 underline">Go import one</a>.
+  </div>
+} @else {
+  <div class="max-w-6xl mx-auto mt-10 p-4 flex flex-col gap-4">
+    <div class="flex flex-col gap-1">
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <h1 class="text-2xl font-semibold">Players</h1>
+        @if (status() === 'ready') {
+          <app-projection-source />
+        }
+      </div>
+      <p class="text-sm text-surface-500">
+        FantasyX's ranking of every player who matters in your league, rostered or available, by how many more points
+        they're projected to score than a free agent at their position, this week or over the rest of the season.
+      </p>
+    </div>
+
+    @switch (status()) {
+      @case ('ready') {
+        @let r = rankings()!;
+        <div class="flex flex-wrap items-center gap-3">
+          <p-selectbutton
+            [options]="horizonOptions"
+            [ngModel]="horizon()"
+            (ngModelChange)="setHorizon($event)"
+            [allowEmpty]="false"
+            optionLabel="label"
+            optionValue="value"
+            ariaLabelledBy="horizon-filter"
+            size="small"
+          />
+          <span id="horizon-filter" class="sr-only">Rank for</span>
+          <!-- Scrolls sideways rather than wrapping if a league's positions don't fit on a phone. -->
+          <div class="filter-scroll">
+            <p-selectbutton
+              [options]="positionOptions()"
+              [ngModel]="position()"
+              (ngModelChange)="setPosition($event)"
+              [allowEmpty]="false"
+              optionLabel="label"
+              optionValue="value"
+              ariaLabelledBy="position-filter"
+              size="small"
+            />
+          </div>
+          <span id="position-filter" class="sr-only">Position</span>
+          <p-selectbutton
+            [options]="availabilityOptions"
+            [ngModel]="availability()"
+            (ngModelChange)="setAvailability($event)"
+            [allowEmpty]="false"
+            optionLabel="label"
+            optionValue="value"
+            ariaLabelledBy="availability-filter"
+            size="small"
+          />
+          <span id="availability-filter" class="sr-only">Availability</span>
+          <p-iconfield class="w-full sm:w-56">
+            <p-inputicon styleClass="pi pi-search" />
+            <input
+              pInputText
+              type="search"
+              class="w-full"
+              pSize="small"
+              placeholder="Search by name"
+              aria-label="Search players by name"
+              [ngModel]="search()"
+              (ngModelChange)="setSearch($event)"
+            />
+          </p-iconfield>
+        </div>
+
+        @if (r.rosteredOnly) {
+          <p class="note">
+            <i class="pi pi-exclamation-circle text-xs"></i>
+            Available players couldn't be loaded, so only rostered players are ranked, and replacement levels are
+            estimated from rostered players.
+          </p>
+        }
+
+        <!-- Scrolls sideways on narrow screens, with the rank and player pinned. -->
+        <p-table
+          [value]="rows()"
+          [paginator]="rows().length > pageSize"
+          [rows]="pageSize"
+          [first]="first()"
+          (firstChange)="first.set($event)"
+          [pageLinks]="3"
+          [scrollable]="true"
+          [tableStyle]="{ 'min-width': '54rem' }"
+          styleClass="p-datatable-sm"
+          dataKey="playerId"
+        >
+          <ng-template pTemplate="header">
+            <tr>
+              <th pFrozenColumn class="rank-column" [attr.aria-sort]="ariaSort('rank')">
+                <button
+                  type="button"
+                  class="sort-button"
+                  [pTooltip]="singlePosition() ? 'Rank at ' + position() : 'Rank among all players'"
+                  tooltipPosition="top"
+                  (click)="sortBy('rank')"
+                >
+                  # <i [class]="sortIcon('rank')" aria-hidden="true"></i>
+                </button>
+              </th>
+              <th pFrozenColumn class="player-column" [attr.aria-sort]="ariaSort('name')">
+                <button type="button" class="sort-button" (click)="sortBy('name')">
+                  Player <i [class]="sortIcon('name')" aria-hidden="true"></i>
+                </button>
+              </th>
+              <th class="!text-right" [attr.aria-sort]="ariaSort('weekProjected')">
+                <button
+                  type="button"
+                  class="sort-button ml-auto"
+                  [pTooltip]="'Projected points this week (week ' + r.scoringPeriod + ').'"
+                  tooltipPosition="top"
+                  (click)="sortBy('weekProjected')"
+                >
+                  Proj <i [class]="sortIcon('weekProjected')" aria-hidden="true"></i>
+                </button>
+              </th>
+              <th class="!text-right" [attr.aria-sort]="ariaSort('weekPoints')">
+                <button
+                  type="button"
+                  class="sort-button ml-auto"
+                  [pTooltip]="'Points scored this week (week ' + r.scoringPeriod + ') so far.'"
+                  tooltipPosition="top"
+                  (click)="sortBy('weekPoints')"
+                >
+                  Pts <i [class]="sortIcon('weekPoints')" aria-hidden="true"></i>
+                </button>
+              </th>
+              <th class="!text-right" [attr.aria-sort]="ariaSort('seasonAverage')">
+                <button
+                  type="button"
+                  class="sort-button ml-auto"
+                  pTooltip="Points per game this season."
+                  tooltipPosition="top"
+                  (click)="sortBy('seasonAverage')"
+                >
+                  Avg <i [class]="sortIcon('seasonAverage')" aria-hidden="true"></i>
+                </button>
+              </th>
+              <th class="!text-right" [attr.aria-sort]="ariaSort('value')">
+                <button
+                  type="button"
+                  class="sort-button ml-auto"
+                  [pTooltip]="(r.horizon === 'week' ? 'This week’s' : 'Rest-of-season') + ' points over a replacement-level player at the same position.'"
+                  tooltipPosition="top"
+                  (click)="sortBy('value')"
+                >
+                  Value <i [class]="sortIcon('value')" aria-hidden="true"></i>
+                </button>
+              </th>
+              @if (r.horizon === 'restOfSeason') {
+                <th class="!text-right" [attr.aria-sort]="ariaSort('restOfSeason')">
+                  <button
+                    type="button"
+                    class="sort-button ml-auto"
+                    [pTooltip]="'Projected points in weeks ' + r.fromWeek + '–' + r.toWeek + '.'"
+                    tooltipPosition="top"
+                    (click)="sortBy('restOfSeason')"
+                  >
+                    ROS <i [class]="sortIcon('restOfSeason')" aria-hidden="true"></i>
+                  </button>
+                </th>
+              }
+              <th [attr.aria-sort]="ariaSort('team')">
+                <button type="button" class="sort-button" (click)="sortBy('team')">
+                  Team <i [class]="sortIcon('team')" aria-hidden="true"></i>
+                </button>
+              </th>
+            </tr>
+          </ng-template>
+          <ng-template pTemplate="body" let-p>
+            @let t = team(p);
+            <tr
+              class="cursor-pointer player-row"
+              [class.player-row-mine]="isMine(p)"
+              tabindex="0"
+              [attr.aria-label]="'Show details for ' + p.fullName"
+              (click)="openPlayer(p)"
+              (keydown.enter)="openPlayer(p)"
+              (keydown.space)="$event.preventDefault(); openPlayer(p)"
+            >
+              <td pFrozenColumn class="rank-column tabular-nums">{{ rankShown(p) }}</td>
+              <td pFrozenColumn class="player-column">
+                <div class="flex items-center gap-2">
+                  <!-- A wrapper, since the avatar's own display would override "hidden". -->
+                  <span class="hidden sm:inline-flex"><app-player-avatar [player]="p" size="large" /></span>
+                  <div class="flex flex-col min-w-0">
+                    <span class="flex items-center gap-1.5">
+                      <span class="truncate" [class.font-semibold]="isMine(p)">{{ p.fullName }}</span>
+                      @if (p.injuryStatus && p.injuryStatus !== 'ACTIVE') {
+                        <p-tag
+                          [severity]="statusSeverity(p.injuryStatus)"
+                          [value]="shortStatus(p.injuryStatus)"
+                          styleClass="status-tag"
+                          [pTooltip]="statusLabel(p.injuryStatus)"
+                          [attr.aria-label]="statusLabel(p.injuryStatus)"
+                        />
+                      }
+                    </span>
+                    <span class="text-xs text-surface-500">{{ p.position }} · {{ p.proTeam }}</span>
+                  </div>
+                </div>
+              </td>
+              <td class="!text-right tabular-nums">{{ p.weekProjected | number: '1.1-1' }}</td>
+              <td class="!text-right tabular-nums">{{ p.weekPoints | number: '1.1-1' }}</td>
+              <td class="!text-right tabular-nums">
+                @if (p.seasonAverage !== null) {
+                  <span [pTooltip]="(p.seasonPoints | number: '1.1-1') + ' pts in ' + p.gamesPlayed + (p.gamesPlayed === 1 ? ' game' : ' games')">
+                    {{ p.seasonAverage | number: '1.1-1' }}
+                  </span>
+                } @else {
+                  <span class="text-surface-500">—</span>
+                }
+              </td>
+              <td class="!text-right tabular-nums font-medium">{{ signed(p.value) }}</td>
+              @if (r.horizon === 'restOfSeason') {
+                <td class="!text-right tabular-nums">{{ p.restOfSeason | number: '1.1-1' }}</td>
+              }
+              <td>
+                @if (t) {
+                  <span class="flex items-center gap-2" [pTooltip]="t.name">
+                    <app-team-logo [logoUrl]="t.logoUrl" [abbrev]="t.abbrev" />
+                    <span>{{ t.abbrev }}</span>
+                  </span>
+                } @else if (p.status === 'WAIVERS') {
+                  <p-tag severity="warn" value="WA" pTooltip="On waivers" aria-label="On waivers" />
+                } @else {
+                  <p-tag severity="success" value="FA" pTooltip="Free agent" aria-label="Free agent" />
+                }
+              </td>
+            </tr>
+          </ng-template>
+          <ng-template pTemplate="emptymessage">
+            <tr>
+              <td [attr.colspan]="r.horizon === 'week' ? 7 : 8" class="text-surface-500">No players match these filters.</td>
+            </tr>
+          </ng-template>
+        </p-table>
+
+        <p class="legend">
+          @if (r.horizon === 'week') {
+            Value is how many more points a player is projected to score this week (week {{ r.fromWeek }}) than a
+            replacement-level player at the same position: the average of the {{ replacementDepth }} best players below
+            the league's last starter there this week. A bye or an injury counts as 0. With one position showing, # is
+            the rank at that position. The average is per game played this season.
+          } @else {
+            Value is how many more points a player is projected to score in weeks {{ r.fromWeek }}–{{ r.toWeek }}, through
+            the fantasy playoffs, than a replacement-level player at the same position: the average of the {{ replacementDepth }} best
+            players below the league's last starter there. Byes and injuries count as 0. With one position showing, # is the
+            rank at that position. The average is per game played this season.
+          }
+        </p>
+        @if (replacementLevels().length) {
+          <p class="legend">
+            Replacement levels:
+            @for (level of replacementLevels(); track level.position; let last = $last) {
+              <span class="whitespace-nowrap">{{ level.position }} {{ level.points | number: '1.1-1' }} pts</span>{{ last ? '.' : ' · ' }}
+            }
+          </p>
+        }
+      }
+      @case ('unavailable') {
+        <p class="text-surface-500 text-sm">
+          <i class="pi pi-exclamation-circle text-xs"></i>
+          Player rankings are unavailable: the league's rosters or projections couldn't be loaded.
+        </p>
+      }
+      @case ('over') {
+        <p class="text-surface-500 text-sm">The fantasy playoffs are over, so there's no rest of season left to rank.</p>
+      }
+      @default {
+        <div class="flex flex-col gap-2" role="status" aria-label="Loading player rankings">
+          <p-skeleton height="2rem" width="24rem" styleClass="max-w-full" />
+          @for (i of placeholders; track i) {
+            <p-skeleton height="2.5rem" />
+          }
+        </div>
+      }
+    }
+  </div>
+
+  <app-player-detail-drawer
+    [player]="selectedPlayer()"
+    [hasPrevious]="hasPreviousPlayer()"
+    [hasNext]="hasNextPlayer()"
+    (previous)="stepPlayer(-1)"
+    (next)="stepPlayer(1)"
+    (closed)="closePlayer()"
+  />
+}

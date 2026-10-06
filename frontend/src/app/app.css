@@ -12,9 +12,14 @@
   background: transparent;
 }
 
-/* Icon-only on phones, like the tabs, so the header fits on one line. */
+/* Icon-only on phones, like the tabs, so the header fits on one line. The icon-only tabs also
+   narrow, so all four fit beside the title at 375px. */
 @media (max-width: 639.98px) {
   .import-button ::ng-deep .p-button-label {
     display: none;
+  }
+
+  .app-header ::ng-deep .p-tab {
+    padding-inline: 0.75rem;
   }
 }

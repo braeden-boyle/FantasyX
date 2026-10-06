@@ -287,7 +287,7 @@ export class LeagueOutlookService {
 
     const { scoringPeriod } = week.week;
     const lastWeek = Math.max(scoringPeriod, ...Object.values(league.scoringPeriodsByMatchupPeriod).flat());
-    const slots = this.draft()?.lineupSlots ?? [];
+    const slots = league.lineupSlots;
     const scores = completedScores(league.schedule, this.completedBefore());
     const projectionOf = this.projections.projectionOf();
 

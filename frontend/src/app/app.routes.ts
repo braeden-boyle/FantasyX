@@ -17,4 +17,11 @@ export const routes: Routes = [
   // Plain /matchup is the user's own matchup; /matchup/:teamId is that team's current matchup.
   { path: 'matchup', component: MatchupComponent },
   { path: 'matchup/:teamId', component: MatchupComponent },
+  // FantasyX's player rankings, rostered and available players alike. Loaded on first visit, to keep
+  // its table and filters out of the initial bundle.
+  {
+    path: 'players',
+    loadComponent: () =>
+      import('./components/player-rankings/player-rankings.component').then((m) => m.PlayerRankingsComponent),
+  },
 ];
