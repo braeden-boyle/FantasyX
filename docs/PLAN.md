@@ -1,6 +1,6 @@
 # FantasyX — Plan
 
-## Status (as of 2026-09-30)
+## Status (as of 2026-10-05)
 
 | Milestone | GitHub issue / branch | State |
 |---|---|---|
@@ -13,6 +13,8 @@
 | Restore import on refresh | #11 `11-restore-import-on-refresh` (PR #12) | Merged |
 | v1.6 — Win probability | #13 `13-add-win-probability-to-the-matchup-view` (PR #14) | Merged. Its spreads endpoint was replaced in v1.7 |
 | v1.7 — Custom projections | #15 `15-add-custom-projections-with-an-espn-fantasyx-setting` | Built and checked against a live league. Not yet merged |
+| v1.8 — Power rankings & playoff odds | #17 `17-add-team-power-rankings-and-playoff-odds` | Built |
+| v1.9 — Player rankings | #19 `19-add-player-rankings` | Built and checked against a mock league; live-league checks still to do |
 
 Sections below were first written as forward-looking plans. v1 and v1.1 are kept as the design record, with corrections where the build turned out differently.
 
@@ -546,3 +548,170 @@ Rank every team by how strong it is rather than by record alone, and show each t
 
 - The production build's initial bundle is 1.52 MB, 22 kB over the 1.5 MB warning budget. It's a warning, not an error.
 - Remaining-game ties aren't enumerated by the exact check (W/L only), which only matters in leagues that allow ties.
+
+---
+
+# v1.9: Player Rankings (issue #19) — built on `19-add-player-rankings`
+
+## Goal
+
+FantasyX's own ranking of every player who matters in the league, rostered or available, by **rest-of-season value over replacement**: how many more points a player is projected to score from now to the end of the fantasy season than a freely available player at the same position. It's built on this league's scoring and lineup, and it follows the ESPN / FantasyX projection setting. It answers the mid-season questions: who to trade for, which pickup is worth a claim, and how your own players compare with the rest of the league.
+
+## Decisions
+
+- **Metric: rest-of-season value over replacement.**
+  - **Rest-of-season points (ROS):** the sum of a player's projection over every NFL week from the current scoring period through the last week of the fantasy playoffs (the last week in `ScoringPeriodsByMatchupPeriod`). It's the same window as v1.8's Rest of Season power ranking. A week ESPN doesn't project the player (bye, ruled out) counts 0, so byes and injuries already lower the total. Playoff weeks count the same as regular-season weeks, on purpose: that way value means the same for every owner and for free agents. Weighting them by v1.8's playoff odds would make value depend on the team, and leave it undefined for free agents.
+  - **Projections** come from the active source, the same way as v1.8's per-week strengths: ESPN's upcoming projections, with the bias model applied in FantasyX mode.
+  - **Replacement level, per position:** first count how many players at each position start across the league. That's each dedicated slot's count × the number of teams. Flex slots (RB/WR/TE, OP and so on) are then filled from the whole pool, best remaining eligible player first, in the same most-restrictive-first order as `bestLineupTotal`. The replacement level is the mean ROS of the `REPLACEMENT_DEPTH` (3) players just below the last starter at that position. Averaging a few players means one injured or unprojected player doesn't move the whole position.
+  - **Value** = ROS − replacement level. The overall rank is by value, so positions can be compared. The position rank (e.g. RB12) is by ROS.
+  - Replacement is worked out from projections only. Who rosters a player doesn't matter, so the value means the same thing for a rostered player and a free agent.
+  - **Not done:** a separate replacement level for each week. It would credit players who fill byes, but it's much more work for a small gain. Revisit if the rankings look wrong around bye weeks.
+- **Player pool:** every rostered player in the league (from the cached week of matchups, benches and IR included), plus the top `AVAILABLE_PER_POSITION` (50) free agents and waiver players at each starting position in the league's slots, by percent owned. The available players are needed for the replacement level to be right. Without them, the replacement level is set by the worst rostered starters, not by what's actually on waivers. They're fetched per position because a single league-wide list by percent owned can leave too few kickers and D/ST (both low-owned), or too few players at any position in a deep league. Players outside the pool aren't ranked.
+- **Positions and slots** come from the league's lineup settings (see Backend), so a league without kickers ranks no kickers, and a superflex league's OP slot pulls QBs into the starter count. IDP slots are still ignored, as in v1.8.
+- **Season-to-date context**, shown next to the value but not used in it: points, games and average per game, from `player-history` weeks.
+- **Current and rest of season only.** The rankings show today's projections and nothing else. There are no movement arrows and no past rankings in the UI.
+- **Rankings change** when the scoring period changes or the projection setting is switched. They don't follow live scores.
+- **Snapshots, saved weekly on a schedule:** a GitHub Actions workflow saves the league's rankings every Wednesday at 14:00 UTC, in both projection modes (see Scheduled capture). By then ESPN has moved to the new week, most leagues have processed waivers, and Thursday's game is still a day away. Every week is captured at the same point, which is what a later backtest of value against actual scores needs. ESPN doesn't keep old projections, so this is the only way to have them.
+  - One snapshot per league, season, scoring period and projection source. The first save wins and a later one for the same key writes nothing.
+  - Only the scheduled job saves. Opening the Players page never writes, and nothing in the app reads snapshots yet.
+  - Only complete rankings are saved: not when the available players failed (rostered only), and not when the rankings are unavailable. In that case the run fails.
+  - A failed run shows red in Actions and emails the repo owner. It can be re-run by hand (`workflow_dispatch`). A re-run later in the week is still saved, and `CreatedAtUtc` shows when it was taken.
+- **UI:**
+  - **Players tab** (`/players`) after League in the header nav, icon-only on phones like the others.
+    - A `p-table` with columns, in order: rank, player (avatar, name, position · NFL team, injury tag), this week's projection (active source), this week's points so far, season average, value, ROS, and last the fantasy team (logo and abbreviation, or an **FA** / **WA** tag). This week's points are as of when the rosters loaded, like the rest of the rankings.
+    - A **This Week / Rest of Season** switch (`p-selectbutton`, Rest of Season by default). This Week ranks the same way over a one-week window: value is this week's projection over this week's replacement level, position ranks follow this week's projection, and the ROS column is hidden (it would repeat Proj). Snapshots and the drawer stay rest of season. Added after the first build.
+    - No position rank column (dropped after the first build): filtered to one position, the # column shows the rank at that position instead (the WR1 reads 1 whatever their overall rank). All and FLEX show the overall rank. The drawer still shows the position rank.
+    - Filters: position (`p-selectbutton`: All, each position in the league's slots, and FLEX), availability (All / Rostered / Available), and a name search. Sorted by value by default, and every column can be sorted.
+    - Paginated at 50 rows. Your players' rows are highlighted.
+    - Clicking a row opens the existing player drawer. `/api/espn/player` already takes any player id, free agents included.
+    - A legend under the table names the weeks covered and the replacement levels ("RB replacement: 41.3 pts"). The "FantasyX projections" tag shows by the heading.
+    - Phones: the table scrolls sideways with the rank and player columns pinned, like the standings.
+  - **Player drawer:** the summary gains "FantasyX rank 34th · RB12 · Value +41.2", or "Not ranked" for a player outside the pool.
+  - **Roster view:** unchanged. The position rank shows in the drawer only (decided after the first build, which put it in the position · team line).
+- **Failure:**
+  - Available players fail: rankings show for rostered players only, with a note that replacement levels are estimated from rostered players.
+  - History or upcoming projections fail: the rankings are unavailable, with a note. ESPN figures are never shown under a FantasyX label.
+- **Deferred:** a trade analyzer, waiver suggestions ("better than your starter"), weekly start/sit rankings, playoff-weighted or team-specific value, dynasty/keeper value, and ranges from v1.6's spreads.
+
+## Backend
+
+- `LeagueDto` gains `LineupSlots`, mapped the same way as `DraftDto.LineupSlots` (`EspnLookups.StartingSlot`). The league call already requests `mSettings`, so no new view is needed. The rankings no longer depend on the draft loading.
+- `POST /api/espn/available-players` takes `{ leagueId, season, scoringPeriod, positions, perPosition, espnS2?, swid? }` and returns `AvailablePlayerDto[]`. `positions` is the league's starting position ids (from `LineupSlots`) and `perPosition` is 1–100. It makes one ESPN call per position in parallel, then merges the results and drops duplicate player ids. Each player has:
+  - Identity, matching `PlayerDto`: `PlayerId`, `FullName`, `Position`, `ProTeam`, `InjuryStatus`, `HeadshotUrl`, `IsTeamLogo`.
+  - `Status` ("FREEAGENT" / "WAIVERS"), `PercentOwned`, and `Points`: what they've scored in the requested scoring period so far.
+  - `Weeks` and `Upcoming`, in `PlayerHistoryDto`'s shape and under the same rules, so the frontend models them the same way.
+- **ESPN call, to confirm first (spike):** for each position, one `kona_player_info` call with an `x-fantasy-filter` of `filterStatus` FREEAGENT + WAIVERS, `filterSlotIds` for that position, `sortPercOwned` descending, `limit` = `perPosition`, and `filterStatsForScoringPeriodIds` 1–18. v1.6 found that ESPN answers 400 to `limit` on a `kona_playercard` call filtered by `filterIds`. This view and filter are different, but check it first.
+  - If `kona_player_info` returns no weekly stats, fall back to two steps: those calls for ids only, then the existing `player-history` path for those ids.
+  - Either way, the per-week mapping (actuals, projections, opponent rank via `GameFor`) is pulled out of `GetPlayerHistory` into a helper both endpoints share.
+- **Snapshot storage**, following v1.1's EF Core + Supabase pattern (`Data/FantasyXDbContext.cs`):
+  - `Models/PlayerRankingSnapshot.cs` → `player_ranking_snapshots`: `Id`, `LeagueId`, `Season`, `ScoringPeriod`, `ProjectionSource` ("ESPN" / "FANTASYX"), `FirstWeek`, `LastWeek`, `ReplacementLevels` (jsonb, position → points) and `CreatedAtUtc`, with a unique index on (`LeagueId`, `Season`, `ScoringPeriod`, `ProjectionSource`).
+  - `Models/PlayerRankingSnapshotEntry.cs` → `player_ranking_snapshot_entries`: `SnapshotId` (FK, cascade delete), `PlayerId`, `Position`, `FantasyTeamId` (null for free agents), `Status` ("ROSTERED" / "FREEAGENT" / "WAIVERS"), `Rank`, `PositionRank`, `RestOfSeasonPoints`, `Value` and `WeeklyProjections` (jsonb, week → points, so a backtest can compare any part of the window). The key is (`SnapshotId`, `PlayerId`).
+  - `POST /api/player-ranking-snapshots` (`PlayerRankingSnapshotsController`) writes the snapshot and its entries in one transaction. If one already exists for that key, it returns 200 and writes nothing, so the first write wins. There's no GET yet.
+  - The endpoint needs an `X-Capture-Key` header that matches the `Snapshots:CaptureKey` setting (user-secrets locally, an env var in the workflow). A missing or wrong key gets 401. It returns 404 when no key is configured, so a future hosted backend doesn't expose an open write endpoint.
+  - Migrations: `AddPlayerRankingSnapshots`, then `EnablePlayerRankingSnapshotRls`, which enables RLS with **no policies** on both tables, as v1.1's Security notes require for every new table. Check Supabase's security advisors afterwards.
+- Sample requests for both endpoints go in `FantasyX.Backend.http`.
+
+## Frontend
+
+- `utils/player-rankings.ts` (pure), with every tunable constant (`REPLACEMENT_DEPTH`, `AVAILABLE_PER_POSITION`):
+  - `restOfSeasonPoints(weeks, projectionFor)`
+  - `startersByPosition(slots, teamCount, pool)`: the dedicated + flex fill. The slot ordering is shared with `bestLineupTotal`, extracted from `power-rankings.ts`.
+  - `replacementLevels`, `playerValues`, `rankPlayers` (overall and position ranks)
+  - `buildPlayerRankings(input, source, horizon = 'restOfSeason')`: the whole pipeline from plain API data (league, rosters, histories, available players) to the ranked list, replacement levels and weeks covered. Both `PlayerRankingsService` and the capture script call it, so the saved rankings are exactly what the page shows.
+  - `snapshotPayload(rankings, …)`: maps a result to the snapshot request.
+- `utils/projections.ts` gains the upcoming-week projection for any player (`upcomingProjection`): a player id, position and their own history in, the active source's projection out. The bias is per player, so a free agent needs only its own weeks. The rank term's slope stays fitted on rostered players (and is off anyway, `USE_RANK_TERM = false`). `ProjectionsService` wraps it, and the capture script calls it directly.
+- `AvailablePlayersService`: a session cache keyed on the import and scoring period, the same pattern as `PlayerHistoryService`. It sends the league's starting positions and `AVAILABLE_PER_POSITION`, and is only loaded when the rankings are wanted.
+- `PlayerRankingsService` (loaded by the Players page and by the drawer when it opens):
+  - Combines the league (slots, team count, weeks per matchup period) from `LeagueOutlookService`, rosters and owners from `WeekMatchupsService`, upcoming projections through `ProjectionsService`, and `AvailablePlayersService`.
+  - Exposes `rankings` (rest of season), `rankingsFor(horizon)` for the switch, `rankOf(playerId)` and a status. Each ranking is only built when read. It has an `ensureLoaded()` for the Players page, drawer and roster to call.
+- Components: `PlayerRankingsComponent` (`/players`), the nav tab, and the drawer summary line.
+
+## Scheduled capture
+
+- `frontend/scripts/capture-player-rankings.ts`, run with `tsx` (new dev dependency) as `npm run capture:rankings`. It imports only `utils/` and `models/`, never Angular.
+  - Reads `API_URL`, `LEAGUE_ID`, `ESPN_S2`, `SWID` and `CAPTURE_KEY` from the environment. `SEASON` defaults to the current NFL season (this year from March on, last year before).
+  - Fetches through the backend, the same endpoints as the app: `league`, `matchups` for the current week, `player-history` for every rostered player, and `available-players`. ESPN calls are retried 3 times with backoff.
+  - Runs `buildPlayerRankings` for ESPN and FantasyX, and posts both snapshots.
+  - Exits 0 with "nothing to capture" before week 1 or after the last playoff week. It exits non-zero on any failure or incomplete ranking.
+  - Logs only counts and ranks, never cookies or other secrets: the Actions logs are public on this repo.
+- `.github/workflows/capture-player-rankings.yml`:
+  - Triggers: `schedule: '0 14 * 9-12,1 3'` (Wednesdays 14:00 UTC, September–January) and `workflow_dispatch` for manual runs.
+  - Steps: check out; set up .NET 8 and Node; `npm ci` in `frontend`; start the backend in the background (`dotnet run`, `ConnectionStrings__FantasyX` and `Snapshots__CaptureKey` from secrets); wait for it to answer; run the script; stop the backend.
+  - Repo secrets: `FANTASYX_DB_CONNECTION` (the session-pooler string, as in v1.1), `ESPN_S2`, `ESPN_SWID`, `FANTASYX_LEAGUE_ID` and `SNAPSHOT_CAPTURE_KEY`. GitHub masks them in logs.
+  - The saved-credentials table isn't used: its Data Protection keys only exist on the dev machine. The cookies in secrets are a second copy, to update by hand when ESPN expires them. An expired cookie shows up as a failed run.
+  - GitHub only runs scheduled workflows from `main`, so it starts once v1.9 is merged. On a public repo it turns schedules off after 60 days without any repo activity, so it may need turning back on before each season.
+
+## Verification
+
+1. **Spike:** the `kona_player_info` call on a live league. Confirm that `limit` is accepted, the pool is sorted by percent owned, waiver players are included, and weekly stats and projections come back. Then confirm that the merged response has at least `REPLACEMENT_DEPTH` + 10 unrostered players at every starting position, K and D/ST included. Record the result in this section before building the rest of the endpoint.
+   - **Result so far (2026-10-05), on ESPN's default player pool** (`leaguedefaults/3`, which needs no league): `limit` is accepted (5 and 100 came back exactly), the list is sorted by percent owned, `status` (FREEAGENT / WAIVERS) is on each entry, and every player has weekly actuals and projections (`statSplitTypeId` 1) for weeks 1–18. A bye week comes back as a 0 projection. That pool has all 32 D/STs. `mPositionalRatings` returns nothing there, since it isn't a league. So the single-step call was built, without the two-step fallback.
+   - **Still to confirm on a live league:** that waiver players come back alongside free agents, that `positionAgainstOpponent` comes back with `kona_player_info`, and the unrostered count at every position (K and D/ST included).
+2. **Vitest:**
+   - ROS sums over the right weeks, with byes as 0.
+   - The starter count for a standard league (QB 1, RB 2, WR 2, TE 1, FLEX 1, 10 teams): the flex goes to the best remaining RB/WR/TE.
+   - Superflex pulls QBs into the starter count, and a league without K ranks no kickers.
+   - The replacement level is the mean of the next `REPLACEMENT_DEPTH` players.
+   - The player at replacement level has a value of about 0, and every starter has a value above 0.
+   - Ranks are stable when values tie.
+   - `snapshotPayload` includes every ranked player (no team id and the right status for free agents), and refuses rostered-only or failed rankings.
+   - The capture script's season default (March on → this year) and its "nothing to capture" window.
+3. **Live league, both projection modes:**
+   - The top 10 at each position should look sensible against ESPN's own rest-of-season rankings. Record the rank correlation per position here.
+   - Each replacement level should sit close to what the best waiver player at that position is projected for.
+   - Switching the setting re-ranks the table, and the tag follows it.
+4. **UI:** filters, search, sorting and pagination; your rows highlighted; FA / WA tags; the drawer opens for a free agent; the drawer and roster ranks match the table; and no page overflow at 375px.
+5. **Failures:** an available-players failure (rostered only, with the note) and a history failure (unavailable, with the note).
+6. **Snapshots:**
+   - Run `dotnet ef database update`. Both tables show RLS enabled with no policies, and Supabase's security advisors are clean.
+   - The endpoint returns 404 with no capture key configured, and 401 with a wrong key.
+   - Run `npm run capture:rankings` against the local backend: two snapshot rows for the period, and their top entries match the Players page in each mode. Run it again: still two, unchanged. Loading the Players page writes nothing.
+   - After merging: add the repo secrets, trigger the workflow once by hand, and check it goes green, writes nothing new for an already-saved week, and prints no secrets.
+
+## Open questions
+
+- **Backtest:** when and how to compare the stored snapshots with what players actually scored. That's its own milestone, once a season's worth is collected.
+- **More than one league:** the workflow captures the one league in its secrets. Capturing more would need a list of leagues (and their cookies) somewhere the job can read.
+- **Hosting:** once the backend is hosted, the workflow could call it instead of starting its own copy, and could read the saved credentials if the Data Protection keys move with it.
+- **Snapshot retention:** each snapshot is roughly the rostered players plus 50 per position, per league, period and mode. That's small, but it grows every season with nothing pruning it.
+
+## As built
+
+- **Backend:**
+  - `available-players` takes positions by **name** ("QB", "RB", …), not slot ids, since `LineupSlots` carries names. `EspnLookups.PositionSlotId` maps each to its slot for `filterSlotIds`. An unknown position gets a 400.
+  - The per-week mapping shared by both endpoints is `PlayerWeeks`.
+  - Snapshot saves answer 201 when written and 200 when the key already exists, both with `{ snapshotId, created }`. A concurrent duplicate that hits the unique index is treated as "already exists".
+  - The capture key is checked by `RequireCaptureKeyAttribute`, an authorization filter, so it runs before the body is validated. It compares SHA-256 hashes in constant time.
+  - The jsonb columns are dictionaries converted to and from JSON strings, so Npgsql's dynamic JSON doesn't need switching on. The foreign key and unique index have explicit names (`fk_player_ranking_snapshot_entries_snapshot`, `ix_player_ranking_snapshots_key`), since EF's defaults run past Postgres's 63 characters.
+- **Frontend:**
+  - `slotFillOrder` (`power-rankings.ts`) is the shared slot order. `bestLineupTotal` and `startersByPosition` both use it. `LeagueOutlookService`'s per-week strengths now take the league's `lineupSlots`, not the draft's.
+  - `upcomingProjection(source, espn, history, week)` is the shared upcoming projection. `ProjectionSource` moved into `utils/projections.ts`, so the capture script doesn't import an Angular service. `SettingsService` re-exports it.
+  - The Players page sorts with its own header buttons, not `p-table`'s sorting. That way each column's first click goes the useful way (Value, ROS and Avg descending; rank and name ascending), and the drawer steps through the rows exactly as shown, turning the table's page as it goes. Players with no games sit at the bottom by average, in either direction.
+  - The `/players` route is lazy-loaded, which keeps its table and filters out of the initial bundle.
+  - The drawer takes a `DrawerPlayer`: a roster row, or a ranked player with no roster row. For a free agent, the header's "This week" line comes from the detail once it loads.
+  - On phones, the header's icon-only tabs narrow so all four fit at 375px. The position filter scrolls sideways when a league's positions don't fit; a standard league's are 50px too wide.
+- **Capture:** the script's pure parts live in `scripts/capture-helpers.ts` (`defaultSeason`, `captureWindow`, `withRetries`), and Vitest also runs `scripts/**/*.spec.ts`.
+  - "Before week 1" means no scoring period yet, or no players rostered (before the draft).
+  - Only network errors and 5xx answers are retried, 3 times, 2 / 4 / 8 s apart. A 4xx (expired cookies, wrong key) fails at once.
+  - It logs the week, counts, and each mode's top 5 with ranks.
+  - The workflow runs the built backend DLL from `backend/`, so it finds `appsettings.json` and the saved process id is the app's. It prints the backend's log tail only when a step fails.
+
+## Verification done
+
+- `dotnet build`, `ng build` (initial bundle 1.54 MB, 41 kB over the warning budget, up from 22 kB), and Vitest: 91 tests. That's 17 in `player-rankings.spec.ts`, 3 more in `projections.spec.ts`, and 7 in `capture-helpers.spec.ts`.
+- Migrations applied to Supabase. Both tables have RLS enabled with no policies. The security advisors show only the INFO-level "RLS enabled, no policy" notice, which is on every table by design.
+- Snapshot endpoint: 404 with no key configured, 401 with a missing or wrong key, and 400 for an invalid body. `available-players` answers 400 for an unknown position, and ESPN's 401 for an unreadable league.
+- **Against a mock API** (10 teams, week 5, 14-week regular season, playoffs weeks 15–17, standard lineup, 160 rostered and 174 available players):
+  - Filters, search, sorting, pagination and `aria-sort` work. Your rows are highlighted, and FA / WA tags show.
+  - The drawer opens for a waiver player, with this week's game from its detail. It steps across pages. Its rank line matches the table.
+  - Switching to FantasyX re-ranks the table, moves the replacement levels, and shows the tag.
+  - Available players failing: rostered-only, with the note. History failing: unavailable, with the note, no FantasyX label, and no roster ranks.
+  - At 375px, no page overflow, and the rank and player columns stay pinned.
+  - One history request and one available-players request per page load.
+- **Capture, end to end** (mock ESPN data, the real backend and Supabase):
+  - The first run saved two snapshots of 334 entries each, 174 of them unrostered. Each mode's top 5 matched the Players page.
+  - A second run wrote nothing.
+  - A wrong key exits 1, and so does an available-players failure (after 3 retries). Loading the Players page made no snapshot calls.
+- **Still to do on a live league:**
+  - The spike's remaining checks (above).
+  - Step 3: the top 10 at each position against ESPN's rest-of-season rankings, with the rank correlation recorded here, and replacement levels against the best waiver players.
+  - A capture run against the real league. Then, after merging, the repo secrets and one manual workflow run.
