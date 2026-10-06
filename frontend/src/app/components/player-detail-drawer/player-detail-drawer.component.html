@@ -106,10 +106,14 @@
         @switch (playerRankings.status()) {
           @case ('ready') {
             @if (ranking(); as r) {
-              <p class="text-sm">
-                FantasyX rank <span class="font-semibold">{{ ordinal(r.rank) }}</span>
-                · <span class="font-semibold">{{ r.position }}{{ r.positionRank }}</span>
-                · Value <span class="font-semibold">{{ signed(r.value) }}</span>
+              <!-- A flex row, so the info icon sits centred on the text with a gap (Angular drops the
+                   whitespace between elements). -->
+              <p class="text-sm flex items-center gap-1.5">
+                <span>
+                  FantasyX rank <span class="font-semibold">{{ ordinal(r.rank) }}</span>
+                  · <span class="font-semibold">{{ r.position }}{{ r.positionRank }}</span>
+                  · Value <span class="font-semibold">{{ signed(r.value) }}</span>
+                </span>
                 <i
                   class="pi pi-info-circle text-xs text-surface-500"
                   tabindex="0"
