@@ -79,3 +79,9 @@ export function matchupStars(rank: number | null): number {
   if (rank === null) return 0;
   return Math.min(5, Math.max(1, Math.ceil((rank / 32) * 5)));
 }
+
+// A points difference to one decimal with its sign: "+41.2", or "−3.5" with a real minus sign.
+export function signed(value: number): string {
+  const rounded = Math.round(value * 10) / 10;
+  return `${rounded < 0 ? '−' : '+'}${Math.abs(rounded).toFixed(1)}`;
+}

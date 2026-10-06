@@ -60,6 +60,17 @@ public static class EspnLookups
             [23] = ("FLEX", ["RB", "WR", "TE"]),
         };
 
+    // Each position's own lineup slot, for filtering ESPN's player pool by position.
+    private static readonly IReadOnlyDictionary<string, int> PositionSlots = new Dictionary<string, int>
+    {
+        ["QB"] = 0,
+        ["RB"] = 2,
+        ["WR"] = 4,
+        ["TE"] = 6,
+        ["D/ST"] = 16,
+        ["K"] = 17,
+    };
+
     private const int DefenseSpecialTeamsPositionId = 16;
 
     public static string PositionName(int defaultPositionId) =>
@@ -77,6 +88,10 @@ public static class EspnLookups
     // draft-day lineups don't fill.
     public static (string Name, string[] Positions)? StartingSlot(int lineupSlotId) =>
         StartingSlots.TryGetValue(lineupSlotId, out var slot) ? slot : null;
+
+    // The lineup slot a position's own players fill, e.g. RB -> 2; null for an unknown position.
+    public static int? PositionSlotId(string position) =>
+        PositionSlots.TryGetValue(position, out var slotId) ? slotId : null;
 
     public static bool IsDefenseSpecialTeams(int defaultPositionId) => defaultPositionId == DefenseSpecialTeamsPositionId;
 

@@ -24,16 +24,27 @@ import { ButtonModule } from 'primeng/button';
 import { TableModule } from 'primeng/table';
 import { TagModule } from 'primeng/tag';
 import { RatingModule } from 'primeng/rating';
+import { TooltipModule } from 'primeng/tooltip';
 import { PlayerAvatarComponent } from '../player-avatar/player-avatar.component';
 import { ScoringBreakdownComponent } from '../scoring-breakdown/scoring-breakdown.component';
 import { PlayerDetailService } from '../../services/player-detail.service';
 import { ProjectionsService } from '../../services/projections.service';
+import { PlayerRankingsService } from '../../services/player-rankings.service';
 import { ProjectionSourceComponent } from '../projection-source/projection-source.component';
 import { Player, PlayerDetail, PlayerGame } from '../../models/team.model';
-import { formatGameDate, formatGameTime, matchupStars, statusSeverity } from '../../utils/player-format';
+import { ordinal } from '../../utils/league-format';
+import { formatGameDate, formatGameTime, matchupStars, signed, statusSeverity } from '../../utils/player-format';
 
 // Below Tailwind's `lg` breakpoint the drawer always opens full screen.
 const NARROW_QUERY = '(max-width: 1023.98px)';
+
+// What the header shows while the detail loads: a roster row, with this week's game, or a player on
+// no roster (from the Players page), without one until their detail arrives.
+export type DrawerPlayer = Pick<
+  Player,
+  'playerId' | 'fullName' | 'position' | 'proTeam' | 'injuryStatus' | 'headshotUrl' | 'isTeamLogo'
+> &
+  Partial<Pick<Player, 'opponent' | 'opponentIsHome' | 'gameTimeUtc'>>;
 
 @Component({
   selector: 'app-player-detail-drawer',
@@ -50,6 +61,7 @@ const NARROW_QUERY = '(max-width: 1023.98px)';
     TableModule,
     TagModule,
     RatingModule,
+    TooltipModule,
     ScoringBreakdownComponent,
     PlayerAvatarComponent,
     ProjectionSourceComponent,
@@ -60,9 +72,10 @@ const NARROW_QUERY = '(max-width: 1023.98px)';
 export class PlayerDetailDrawerComponent {
   private readonly playerDetail = inject(PlayerDetailService);
   private readonly projections = inject(ProjectionsService);
+  protected readonly playerRankings = inject(PlayerRankingsService);
 
-  // The roster row that was clicked; the header renders from it immediately while the detail loads.
-  readonly player = input<Player | null>(null);
+  // The row that was clicked; the header renders from it immediately while the detail loads.
+  readonly player = input<DrawerPlayer | null>(null);
   readonly hasPrevious = input(false);
   readonly hasNext = input(false);
 
@@ -94,6 +107,28 @@ export class PlayerDetailDrawerComponent {
   protected readonly matchupStars = matchupStars;
 
   protected readonly statColumns = computed(() => this.detail()?.statColumns ?? []);
+
+  // This week's game for the header: from the row when it has one, otherwise from the detail once
+  // it's loaded. Undefined until it's known; opponent is null on a bye.
+  protected readonly thisWeek = computed(() => {
+    const p = this.player();
+    if (!p) return undefined;
+    if (p.opponent !== undefined) {
+      return { opponent: p.opponent, isHome: p.opponentIsHome ?? null, gameTimeUtc: p.gameTimeUtc ?? null };
+    }
+    const d = this.detail();
+    if (d?.playerId !== p.playerId) return undefined;
+    const game = d.games.find((g) => g.week === d.currentWeek && g.status !== 'Bye');
+    return { opponent: game?.opponent ?? null, isHome: game?.isHome ?? null, gameTimeUtc: game?.gameTimeUtc ?? null };
+  });
+
+  // FantasyX's player ranking for the player, or undefined for one outside the pool.
+  protected readonly ranking = computed(() => {
+    const p = this.player();
+    return p ? this.playerRankings.rankOf(p.playerId) : undefined;
+  });
+  protected readonly ordinal = ordinal;
+  protected readonly signed = signed;
 
   protected readonly positionRankLabel = computed(() => {
     const d = this.detail();
@@ -221,7 +256,11 @@ export class PlayerDetailDrawerComponent {
 
     effect(() => {
       const player = this.player();
-      untracked(() => (player ? this.load(player.playerId) : this.reset()));
+      untracked(() => {
+        if (!player) return this.reset();
+        this.playerRankings.ensureLoaded();
+        this.load(player.playerId);
+      });
     });
   }
 

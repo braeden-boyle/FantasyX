@@ -5,8 +5,16 @@ import { SettingsService } from './settings.service';
 import { TeamStateService } from './team-state.service';
 import { WeekMatchupsService } from './week-matchups.service';
 import { PlayerHistoryService } from './player-history.service';
-import { HistoryWeek, MatchupTeam, Player, PlayerDetail, PlayerGame, WeekMatchups } from '../models/team.model';
-import { FantasyXModel, backtest, buildModel, residuals } from '../utils/projections';
+import {
+  HistoryWeek,
+  MatchupTeam,
+  Player,
+  PlayerDetail,
+  PlayerGame,
+  PlayerHistory,
+  WeekMatchups,
+} from '../models/team.model';
+import { FantasyXModel, backtest, buildModel, residuals, upcomingProjection } from '../utils/projections';
 import { ProjectionOf, ResidualsOf, espnProjection, teamOutlook } from '../utils/win-probability';
 
 // What projection figures are showing:
@@ -21,6 +29,7 @@ interface HistoryLoad {
   week: WeekMatchups | null;
   histories: ReadonlyMap<number, HistoryWeek[]>;
   upcoming: ReadonlyMap<number, ReadonlyMap<number, number>>;
+  players: readonly PlayerHistory[];
   positions: ReadonlyMap<number, string>;
   model: FantasyXModel | null;
 }
@@ -30,6 +39,7 @@ const LOADING: HistoryLoad = {
   week: null,
   histories: new Map(),
   upcoming: new Map(),
+  players: [],
   positions: new Map(),
   model: null,
 };
@@ -61,11 +71,12 @@ export class ProjectionsService {
           ? this.weekMatchups.load().pipe(
               switchMap((week) =>
                 this.playerHistory.load(week).pipe(
-                  map(({ histories, upcoming }): HistoryLoad => {
+                  map(({ histories, upcoming, players }): HistoryLoad => {
                     const positions = new Map(
                       week.teams.flatMap((t) => t.team.players.map((p) => [p.playerId, p.position] as const)),
                     );
-                    return { status: 'ready', week, histories, upcoming, positions, model: buildModel(histories, positions) };
+                    const model = buildModel(histories, positions);
+                    return { status: 'ready', week, histories, upcoming, players, positions, model };
                   }),
                 ),
               ),
@@ -102,6 +113,13 @@ export class ProjectionsService {
   ensureLoaded(): void {
     this.wanted.set(true);
   }
+
+  // The week of rosters the history was loaded for, and every rostered player's history and
+  // upcoming projections as the API sent them, for player rankings. Null until loaded.
+  readonly loadedHistory = computed(() => {
+    const load = this.load();
+    return load?.status === 'ready' && load.week ? { week: load.week, players: load.players } : null;
+  });
 
   // The active source's projection for a player's week: a function, for win probability.
   readonly projectionOf = computed<ProjectionOf>(() => {
@@ -145,11 +163,9 @@ export class ProjectionsService {
   readonly futureProjectionOf = computed<((player: Player, week: number) => number) | null>(() => {
     const load = this.load();
     if (load?.status !== 'ready') return null;
-    const model = this.fantasyX() ? load.model : null;
-    return (p: Player, week: number) => {
-      const espn = load.upcoming.get(p.playerId)?.get(week) ?? 0;
-      return model ? model.project(p.playerId, p.position, week, espn, null) : espn;
-    };
+    const source = this.fantasyX() ? 'fantasyx' : 'espn';
+    return (p: Player, week: number) =>
+      upcomingProjection(source, load.upcoming.get(p.playerId)?.get(week) ?? 0, load.histories.get(p.playerId) ?? [], week);
   });
 
   // A team's roster and score from the week the projections were built from.

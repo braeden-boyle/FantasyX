@@ -10,3 +10,12 @@ public record EspnPlayerCardResponse(
 public record EspnPlayerCard(EspnPlayer Player, Dictionary<string, EspnPlayerRating>? Ratings);
 
 public record EspnPlayerRating(int? PositionalRanking);
+
+// League-scoped "kona_player_info" view (the player pool behind ESPN's free-agent list), requested
+// together with "mPositionalRatings".
+public record EspnPlayerInfoResponse(
+    List<EspnPlayerPoolEntryInfo>? Players,
+    EspnPositionAgainstOpponent? PositionAgainstOpponent);
+
+// Status is "FREEAGENT", "WAIVERS" or "ONTEAM".
+public record EspnPlayerPoolEntryInfo(string? Status, EspnPlayer Player);

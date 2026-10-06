@@ -1,0 +1,112 @@
+:host {
+  display: block;
+}
+
+.filter-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+/* Narrower position buttons on phones, so a standard league's fit without scrolling. */
+@media (max-width: 639.98px) {
+  .filter-scroll ::ng-deep .p-togglebutton-content {
+    padding-inline: 0.375rem;
+  }
+}
+
+.player-row:hover > td,
+.player-row:focus-visible > td {
+  background: var(--p-content-hover-background);
+}
+
+.player-row-mine > td {
+  background: var(--p-highlight-background);
+}
+
+.player-row:focus-visible {
+  outline: 2px solid var(--p-primary-400);
+  outline-offset: -2px;
+}
+
+/* Frozen cells need an opaque background so the scrolling columns don't show through them, so
+   the (translucent) row highlights are layered over the row background there, as in standings. */
+:host ::ng-deep .p-datatable-frozen-column {
+  background: var(--p-datatable-row-background);
+}
+
+:host ::ng-deep .p-datatable-thead .p-datatable-frozen-column {
+  background: var(--p-datatable-header-cell-background);
+}
+
+.player-row-mine > td.p-datatable-frozen-column {
+  background: linear-gradient(var(--p-highlight-background), var(--p-highlight-background)),
+    var(--p-datatable-row-background);
+}
+
+.player-row:hover > td.p-datatable-frozen-column,
+.player-row:focus-visible > td.p-datatable-frozen-column {
+  background: linear-gradient(var(--p-content-hover-background), var(--p-content-hover-background)),
+    var(--p-datatable-row-background);
+}
+
+.rank-column {
+  width: 3.25rem;
+}
+
+/* On phones the pinned player column drops its avatar, leaving room for the columns that scroll. */
+.player-column {
+  min-width: 9.5rem;
+  max-width: 9.5rem;
+}
+
+@media (min-width: 640px) {
+  .player-column {
+    min-width: 15rem;
+    max-width: 18rem;
+  }
+}
+
+/* Header labels are buttons that sort by their column. */
+.sort-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  font: inherit;
+  font-weight: 600;
+  color: inherit;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.sort-button:focus-visible {
+  outline: 2px solid var(--p-primary-400);
+  outline-offset: 2px;
+}
+
+.sort-button .pi {
+  font-size: 0.75rem;
+  color: var(--p-primary-color);
+}
+
+.sort-button .sort-icon-idle {
+  color: var(--p-text-muted-color);
+}
+
+:host ::ng-deep .status-tag {
+  font-size: 0.6875rem;
+  padding: 0 0.375rem;
+  line-height: 1.25rem;
+}
+
+.note {
+  font-size: 0.8125rem;
+  color: var(--p-text-muted-color);
+}
+
+.legend {
+  font-size: 0.75rem;
+  color: var(--p-text-muted-color);
+}

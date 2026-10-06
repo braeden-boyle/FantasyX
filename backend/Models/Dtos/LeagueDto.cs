@@ -4,7 +4,8 @@ namespace FantasyX.Backend.Models.Dtos;
 // period before CurrentMatchupPeriod is complete. ScoringPeriodsByMatchupPeriod lists the NFL weeks
 // in each matchup period, playoffs included (a playoff round can span two). RegularSeasonMatchupPeriods and PlayoffTeamCount
 // are 0 when ESPN doesn't send them. PlayoffSeedingRule is ESPN's tiebreaker name, e.g.
-// "TOTAL_POINTS_SCORED" or "H2H_RECORD".
+// "TOTAL_POINTS_SCORED" or "H2H_RECORD". LineupSlots are the starting slots (bench, IR and IDP left
+// out), for the best-lineup fills behind power rankings and player rankings.
 public record LeagueDto(
     string LeagueName,
     int CurrentMatchupPeriod,
@@ -14,7 +15,8 @@ public record LeagueDto(
     int RegularSeasonMatchupPeriods,
     int PlayoffTeamCount,
     string? PlayoffSeedingRule,
-    IReadOnlyList<ScheduledMatchupDto> Schedule);
+    IReadOnlyList<ScheduledMatchupDto> Schedule,
+    IReadOnlyList<LineupSlotDto> LineupSlots);
 
 // Streak is compact, e.g. "W3" or "L1"; null when ESPN has no streak yet.
 public record StandingDto(

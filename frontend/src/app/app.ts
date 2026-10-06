@@ -21,7 +21,7 @@ export class App {
 
   private readonly teamState = inject(TeamStateService);
 
-  // My Team / League only make sense once a team (and its league context) has been imported.
+  // The tabs only make sense once a team (and its league context) has been imported.
   protected readonly hasTeam = this.teamState.team;
   protected readonly restoring = this.teamState.restoring;
 
@@ -29,6 +29,7 @@ export class App {
     { route: '/team', label: 'My Team', icon: 'pi pi-user' },
     { route: '/matchup', label: 'Matchup', icon: 'pi pi-bolt' },
     { route: '/league', label: 'League', icon: 'pi pi-trophy' },
+    { route: '/players', label: 'Players', icon: 'pi pi-users' },
   ];
 
   private readonly url = toSignal(

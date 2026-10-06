@@ -38,6 +38,7 @@ builder.Services.AddDbContext<FantasyXDbContext>(options => options.UseNpgsql(No
 builder.Services.AddDataProtection();
 builder.Services.AddScoped<CredentialProtector>();
 builder.Services.AddScoped<ICredentialsService, CredentialsService>();
+builder.Services.AddScoped<IPlayerRankingSnapshotService, PlayerRankingSnapshotService>();
 
 var app = builder.Build();
 

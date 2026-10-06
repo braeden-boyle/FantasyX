@@ -1,8 +1,9 @@
 import { Injectable, effect, signal } from '@angular/core';
+import { ProjectionSource } from '../utils/projections';
+
+export type { ProjectionSource } from '../utils/projections';
 
 const SETTINGS_KEY = 'fantasyx.settings';
-
-export type ProjectionSource = 'espn' | 'fantasyx';
 
 interface StoredSettings {
   projectionSource?: ProjectionSource;
