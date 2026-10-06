@@ -509,17 +509,17 @@ public class EspnFantasyService : IEspnFantasyService
             {
                 if (!playersById.TryGetValue(id, out var player))
                 {
-                    return new PlayerHistoryDto(id, [], []);
+                    return new PlayerHistoryDto(id, [], [], []);
                 }
 
-                var (weeks, upcoming) = PlayerWeeks(
+                var (weeks, upcoming, schedule) = PlayerWeeks(
                     player,
                     request.Season,
                     request.ScoringPeriod,
                     schedules.FirstOrDefault(team => team.Id == player.ProTeamId),
                     gamesById,
                     response.PositionAgainstOpponent);
-                return new PlayerHistoryDto(id, weeks, upcoming);
+                return new PlayerHistoryDto(id, weeks, upcoming, schedule);
             })
             .ToList();
     }
@@ -575,7 +575,7 @@ public class EspnFantasyService : IEspnFantasyService
             {
                 var player = entry.Player;
                 var isTeamDefense = EspnLookups.IsDefenseSpecialTeams(player.DefaultPositionId);
-                var (weeks, upcoming) = PlayerWeeks(
+                var (weeks, upcoming, schedule) = PlayerWeeks(
                     player,
                     request.Season,
                     request.ScoringPeriod,
@@ -599,7 +599,8 @@ public class EspnFantasyService : IEspnFantasyService
                             && stat.StatSplitTypeId == 1)?
                         .AppliedTotal ?? 0,
                     weeks,
-                    upcoming);
+                    upcoming,
+                    schedule);
             })
             .ToList();
     }
@@ -658,13 +659,16 @@ public class EspnFantasyService : IEspnFantasyService
             lineupSlots);
     }
 
-    // A player's played weeks before currentWeek and ESPN's projection for each week from it on,
-    // shared by player-history and available-players. Only weeks with an actual and a projection
+    // A player's played weeks before currentWeek, ESPN's projection for each week from it on, and
+    // their team's games from it on, shared by player-history and available-players. Only weeks with an actual and a projection
     // above 0 count. ESPN zeroes the projection of a player ruled out and still sends a 0-point
     // actual, so without that check a missed game reads as a perfect prediction and makes the
     // player look steadier than they are. A late scratch who was still projected does count, as a
     // real miss.
-    private static (List<PlayerHistoryWeekDto> Weeks, List<PlayerProjectionWeekDto> Upcoming) PlayerWeeks(
+    private static (
+        List<PlayerHistoryWeekDto> Weeks,
+        List<PlayerProjectionWeekDto> Upcoming,
+        List<PlayerScheduleWeekDto> Schedule) PlayerWeeks(
         EspnPlayer player,
         int season,
         int currentWeek,
@@ -703,7 +707,23 @@ public class EspnFantasyService : IEspnFantasyService
             .Select(entry => new PlayerProjectionWeekDto(entry.Key, entry.Value.AppliedTotal!.Value))
             .ToList();
 
-        return (weeks, upcoming);
+        // The current team's remaining games, so a traded player's schedule is their new team's.
+        var schedule = Enumerable.Range(currentWeek, Math.Max(0, RegularSeasonWeeks - currentWeek + 1))
+            .Select(week => (Week: week, Game: teamSchedule?.ProGamesByScoringPeriod?.GetValueOrDefault(week.ToString()) is [var game, ..] ? game : null))
+            .Where(entry => entry.Game is not null)
+            .Select(entry =>
+            {
+                var isHome = player.ProTeamId == entry.Game!.HomeProTeamId;
+                var opponentId = isHome ? entry.Game.AwayProTeamId : entry.Game.HomeProTeamId;
+                return new PlayerScheduleWeekDto(
+                    entry.Week,
+                    EspnLookups.ProTeamAbbrev(opponentId),
+                    isHome,
+                    PositionRankFor(positionalRatings, player.DefaultPositionId, opponentId));
+            })
+            .ToList();
+
+        return (weeks, upcoming, schedule);
     }
 
     // A played week is matched to its game by id rather than by the player's current team's
