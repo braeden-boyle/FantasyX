@@ -1,4 +1,6 @@
 @FantasyX.Backend_HostAddress = http://localhost:8080
+# The Snapshots:CaptureKey user-secret, for the snapshot request at the end. Never commit a real one.
+@captureKey = your-capture-key
 
 ### List teams in a public league
 POST {{FantasyX.Backend_HostAddress}}/api/espn/leagues/teams
@@ -58,7 +60,17 @@ Content-Type: application/json
   "playerIds": [3918298, 3116406, -16026]
 }
 
-###
+### Get the most-owned free agents and waiver players at each position (with history and upcoming projections)
+POST {{FantasyX.Backend_HostAddress}}/api/espn/available-players
+Content-Type: application/json
+
+{
+  "leagueId": 123456,
+  "season": 2024,
+  "scoringPeriod": 5,
+  "positions": ["QB", "RB", "WR", "TE", "K", "D/ST"],
+  "perPosition": 50
+}
 
 ### Get the draft (every pick with its week 1 projection, plus the starting lineup slots)
 POST {{FantasyX.Backend_HostAddress}}/api/espn/draft
@@ -67,4 +79,32 @@ Content-Type: application/json
 {
   "leagueId": 123456,
   "season": 2024
+}
+
+### Save a player ranking snapshot (needs Snapshots:CaptureKey set; the first save per key wins)
+POST {{FantasyX.Backend_HostAddress}}/api/player-ranking-snapshots
+Content-Type: application/json
+X-Capture-Key: {{captureKey}}
+
+{
+  "leagueId": 123456,
+  "season": 2024,
+  "scoringPeriod": 5,
+  "projectionSource": "ESPN",
+  "firstWeek": 5,
+  "lastWeek": 17,
+  "replacementLevels": { "RB": 41.3, "WR": 52.8 },
+  "entries": [
+    {
+      "playerId": 3918298,
+      "position": "QB",
+      "fantasyTeamId": 1,
+      "status": "ROSTERED",
+      "rank": 1,
+      "positionRank": 1,
+      "restOfSeasonPoints": 251.4,
+      "value": 88.2,
+      "weeklyProjections": { "5": 21.3, "6": 19.8 }
+    }
+  ]
 }
