@@ -5,6 +5,7 @@ import {
   LineupSlot,
   PlayerHistory,
   PlayerRankingSnapshotRequest,
+  ScheduleWeek,
   WeekMatchups,
 } from '../models/team.model';
 import { slotFillOrder } from './power-rankings';
@@ -55,7 +56,10 @@ export interface PlayerRanks {
 // every week of the window to the active source's projection (0 for a week they aren't projected);
 // weekProjected is this week's, and weekPoints what they've scored this week as of the rosters' load.
 // The season figures come from the weeks they played while projected; seasonAverage is null with
-// none.
+// none. game is this week's game (null on a bye). restOfSeasonSchedule and playoffSchedule are
+// the average rank of the opponents still to come against the player's position, over the rest of
+// the season (playoffs included) and over the fantasy playoffs alone: 1 is the toughest, 32 the
+// easiest. Null with no ranked games left in them.
 export interface RankedPlayer extends ValuedPlayer, PlayerRanks {
   fullName: string;
   proTeam: string;
@@ -70,6 +74,9 @@ export interface RankedPlayer extends ValuedPlayer, PlayerRanks {
   seasonPoints: number;
   gamesPlayed: number;
   seasonAverage: number | null;
+  game: ScheduleWeek | null;
+  restOfSeasonSchedule: number | null;
+  playoffSchedule: number | null;
 }
 
 // players are in rank order, and each one's restOfSeason is their points over fromWeek-toWeek (this
@@ -82,6 +89,9 @@ export interface PlayerRankings {
   scoringPeriod: number;
   fromWeek: number;
   toWeek: number;
+  // The fantasy playoff weeks still to come, behind playoffSchedule. Empty once they've all passed,
+  // or when ESPN doesn't say how long the regular season is.
+  playoffWeeks: number[];
   positions: string[];
   replacementLevels: Map<string, number>;
   players: RankedPlayer[];
@@ -92,7 +102,7 @@ export interface PlayerRankings {
 // rostered player's history and upcoming projections, and the available players (null when they
 // failed to load).
 export interface RankingsInput {
-  league: Pick<League, 'standings' | 'scoringPeriodsByMatchupPeriod' | 'lineupSlots'>;
+  league: Pick<League, 'standings' | 'scoringPeriodsByMatchupPeriod' | 'regularSeasonMatchupPeriods' | 'lineupSlots'>;
   week: Pick<WeekMatchups, 'scoringPeriod' | 'teams'>;
   histories: readonly PlayerHistory[];
   available: readonly AvailablePlayer[] | null;
@@ -110,6 +120,28 @@ export function rankingWeeks(scoringPeriod: number, scoringPeriodsByMatchupPerio
   const scheduled = Object.values(scoringPeriodsByMatchupPeriod).flat();
   const last = scheduled.length ? Math.max(...scheduled) : scoringPeriod;
   return Array.from({ length: Math.max(0, last - scoringPeriod + 1) }, (_, i) => scoringPeriod + i);
+}
+
+// The NFL weeks of the fantasy playoffs: every matchup period after the regular season. Empty when
+// the regular season's length isn't known.
+export function playoffWeeks(
+  scoringPeriodsByMatchupPeriod: Record<string, number[]>,
+  regularSeasonMatchupPeriods: number,
+): number[] {
+  if (!regularSeasonMatchupPeriods) return [];
+  return Object.entries(scoringPeriodsByMatchupPeriod)
+    .filter(([period]) => Number(period) > regularSeasonMatchupPeriods)
+    .flatMap(([, weeks]) => weeks)
+    .sort((a, b) => a - b);
+}
+
+// How hard a player's games in the weeks are: their opponents' average rank against the player's
+// position (1 toughest, 32 easiest). Byes and unranked opponents are left out; null with none left.
+export function scheduleStrength(schedule: readonly ScheduleWeek[], weeks: readonly number[]): number | null {
+  const ranks = schedule
+    .filter((g) => weeks.includes(g.week) && g.opponentPositionRank !== null)
+    .map((g) => g.opponentPositionRank!);
+  return ranks.length ? ranks.reduce((a, b) => a + b, 0) / ranks.length : null;
 }
 
 // The sum of a player's projection over the weeks. A week they aren't projected (a bye, or ruled
@@ -206,6 +238,7 @@ interface Candidate {
   weekPoints: number;
   weeks: readonly HistoryWeek[];
   upcoming: ReadonlyMap<number, number>;
+  schedule: readonly ScheduleWeek[];
 }
 
 // The whole pipeline, from plain API data to the ranked list. Null once the fantasy playoffs are
@@ -219,6 +252,9 @@ export function buildPlayerRankings(
   const remaining = rankingWeeks(week.scoringPeriod, league.scoringPeriodsByMatchupPeriod);
   if (!remaining.length) return null;
   const weeks = horizon === 'week' ? remaining.slice(0, 1) : remaining;
+  const playoffs = playoffWeeks(league.scoringPeriodsByMatchupPeriod, league.regularSeasonMatchupPeriods).filter(
+    (w) => remaining.includes(w),
+  );
 
   const positions = startingPositions(league.lineupSlots);
   const ranked = new Set(positions);
@@ -236,6 +272,7 @@ export function buildPlayerRankings(
         weekPoints: p.points,
         weeks: history?.weeks ?? [],
         upcoming: upcomingByWeek(history?.upcoming ?? []),
+        schedule: history?.schedule ?? [],
       });
     }
   }
@@ -249,6 +286,7 @@ export function buildPlayerRankings(
       weekPoints: p.points,
       weeks: p.weeks,
       upcoming: upcomingByWeek(p.upcoming),
+      schedule: p.schedule ?? [],
     });
   }
 
@@ -293,6 +331,9 @@ export function buildPlayerRankings(
         seasonPoints,
         gamesPlayed: c.weeks.length,
         seasonAverage: c.weeks.length ? seasonPoints / c.weeks.length : null,
+        game: c.schedule.find((g) => g.week === week.scoringPeriod) ?? null,
+        restOfSeasonSchedule: scheduleStrength(c.schedule, remaining),
+        playoffSchedule: scheduleStrength(c.schedule, playoffs),
       };
     })
     .sort((a, b) => a.rank - b.rank);
@@ -303,6 +344,7 @@ export function buildPlayerRankings(
     scoringPeriod: week.scoringPeriod,
     fromWeek: weeks[0],
     toWeek: weeks[weeks.length - 1],
+    playoffWeeks: playoffs,
     positions,
     replacementLevels: levels,
     players,
@@ -310,7 +352,7 @@ export function buildPlayerRankings(
   };
 }
 
-function identity(p: Omit<Candidate, 'fantasyTeamId' | 'status' | 'weekPoints' | 'weeks' | 'upcoming'>) {
+function identity(p: Omit<Candidate, 'fantasyTeamId' | 'status' | 'weekPoints' | 'weeks' | 'upcoming' | 'schedule'>) {
   const { playerId, fullName, position, proTeam, injuryStatus, headshotUrl, isTeamLogo } = p;
   return { playerId, fullName, position, proTeam, injuryStatus, headshotUrl, isTeamLogo };
 }

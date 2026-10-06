@@ -111,51 +111,92 @@
                   Player <i [class]="sortIcon('name')" aria-hidden="true"></i>
                 </button>
               </th>
-              <th class="!text-right" [attr.aria-sort]="ariaSort('weekProjected')">
-                <button
-                  type="button"
-                  class="sort-button ml-auto"
-                  [pTooltip]="'Projected points this week (week ' + r.scoringPeriod + ').'"
-                  tooltipPosition="top"
-                  (click)="sortBy('weekProjected')"
-                >
-                  Proj <i [class]="sortIcon('weekProjected')" aria-hidden="true"></i>
-                </button>
-              </th>
-              <th class="!text-right" [attr.aria-sort]="ariaSort('weekPoints')">
-                <button
-                  type="button"
-                  class="sort-button ml-auto"
-                  [pTooltip]="'Points scored this week (week ' + r.scoringPeriod + ') so far.'"
-                  tooltipPosition="top"
-                  (click)="sortBy('weekPoints')"
-                >
-                  Pts <i [class]="sortIcon('weekPoints')" aria-hidden="true"></i>
-                </button>
-              </th>
-              <th class="!text-right" [attr.aria-sort]="ariaSort('seasonAverage')">
-                <button
-                  type="button"
-                  class="sort-button ml-auto"
-                  pTooltip="Points per game this season."
-                  tooltipPosition="top"
-                  (click)="sortBy('seasonAverage')"
-                >
-                  Avg <i [class]="sortIcon('seasonAverage')" aria-hidden="true"></i>
-                </button>
-              </th>
-              <th class="!text-right" [attr.aria-sort]="ariaSort('value')">
-                <button
-                  type="button"
-                  class="sort-button ml-auto"
-                  [pTooltip]="(r.horizon === 'week' ? 'This week’s' : 'Rest-of-season') + ' points over a replacement-level player at the same position.'"
-                  tooltipPosition="top"
-                  (click)="sortBy('value')"
-                >
-                  Value <i [class]="sortIcon('value')" aria-hidden="true"></i>
-                </button>
-              </th>
-              @if (r.horizon === 'restOfSeason') {
+              @if (r.horizon === 'week') {
+                <th [attr.aria-sort]="ariaSort('opponent')">
+                  <button type="button" class="sort-button" (click)="sortBy('opponent')">
+                    Opp <i [class]="sortIcon('opponent')" aria-hidden="true"></i>
+                  </button>
+                </th>
+                <th [attr.aria-sort]="ariaSort('matchup')">
+                  <button
+                    type="button"
+                    class="sort-button"
+                    pTooltip="The opponent's rank against the player's position. More stars, easier matchup."
+                    tooltipPosition="top"
+                    (click)="sortBy('matchup')"
+                  >
+                    Matchup <i [class]="sortIcon('matchup')" aria-hidden="true"></i>
+                  </button>
+                </th>
+                <th class="!text-right" [attr.aria-sort]="ariaSort('weekProjected')">
+                  <button
+                    type="button"
+                    class="sort-button ml-auto"
+                    [pTooltip]="'Projected points this week (week ' + r.scoringPeriod + ').'"
+                    tooltipPosition="top"
+                    (click)="sortBy('weekProjected')"
+                  >
+                    Proj <i [class]="sortIcon('weekProjected')" aria-hidden="true"></i>
+                  </button>
+                </th>
+                <th class="!text-right" [attr.aria-sort]="ariaSort('weekPoints')">
+                  <button
+                    type="button"
+                    class="sort-button ml-auto"
+                    [pTooltip]="'Points scored this week (week ' + r.scoringPeriod + ') so far.'"
+                    tooltipPosition="top"
+                    (click)="sortBy('weekPoints')"
+                  >
+                    Pts <i [class]="sortIcon('weekPoints')" aria-hidden="true"></i>
+                  </button>
+                </th>
+                <th class="!text-right" [attr.aria-sort]="ariaSort('seasonAverage')">
+                  <button
+                    type="button"
+                    class="sort-button ml-auto"
+                    pTooltip="Points per game this season."
+                    tooltipPosition="top"
+                    (click)="sortBy('seasonAverage')"
+                  >
+                    Avg <i [class]="sortIcon('seasonAverage')" aria-hidden="true"></i>
+                  </button>
+                </th>
+                <th class="!text-right" [attr.aria-sort]="ariaSort('value')">
+                  <button
+                    type="button"
+                    class="sort-button ml-auto"
+                    pTooltip="This week’s points over a replacement-level player at the same position."
+                    tooltipPosition="top"
+                    (click)="sortBy('value')"
+                  >
+                    Value <i [class]="sortIcon('value')" aria-hidden="true"></i>
+                  </button>
+                </th>
+              } @else {
+                <th [attr.aria-sort]="ariaSort('restOfSeasonSchedule')">
+                  <button
+                    type="button"
+                    class="sort-button"
+                    [pTooltip]="'Strength of schedule in weeks ' + r.fromWeek + '–' + r.toWeek + ': how the opponents rank against the player’s position. More stars, easier games.'"
+                    tooltipPosition="top"
+                    (click)="sortBy('restOfSeasonSchedule')"
+                  >
+                    ROS SOS <i [class]="sortIcon('restOfSeasonSchedule')" aria-hidden="true"></i>
+                  </button>
+                </th>
+                @if (r.playoffWeeks.length) {
+                  <th [attr.aria-sort]="ariaSort('playoffSchedule')">
+                    <button
+                      type="button"
+                      class="sort-button"
+                      [pTooltip]="'Strength of schedule in the fantasy playoffs (weeks ' + r.playoffWeeks[0] + '–' + r.playoffWeeks[r.playoffWeeks.length - 1] + '). More stars, easier games.'"
+                      tooltipPosition="top"
+                      (click)="sortBy('playoffSchedule')"
+                    >
+                      Playoff SOS <i [class]="sortIcon('playoffSchedule')" aria-hidden="true"></i>
+                    </button>
+                  </th>
+                }
                 <th class="!text-right" [attr.aria-sort]="ariaSort('restOfSeason')">
                   <button
                     type="button"
@@ -165,6 +206,28 @@
                     (click)="sortBy('restOfSeason')"
                   >
                     ROS <i [class]="sortIcon('restOfSeason')" aria-hidden="true"></i>
+                  </button>
+                </th>
+                <th class="!text-right" [attr.aria-sort]="ariaSort('value')">
+                  <button
+                    type="button"
+                    class="sort-button ml-auto"
+                    pTooltip="Rest-of-season points over a replacement-level player at the same position."
+                    tooltipPosition="top"
+                    (click)="sortBy('value')"
+                  >
+                    Value <i [class]="sortIcon('value')" aria-hidden="true"></i>
+                  </button>
+                </th>
+                <th class="!text-right" [attr.aria-sort]="ariaSort('seasonAverage')">
+                  <button
+                    type="button"
+                    class="sort-button ml-auto"
+                    pTooltip="Points per game this season."
+                    tooltipPosition="top"
+                    (click)="sortBy('seasonAverage')"
+                  >
+                    Avg <i [class]="sortIcon('seasonAverage')" aria-hidden="true"></i>
                   </button>
                 </th>
               }
@@ -208,20 +271,59 @@
                   </div>
                 </div>
               </td>
-              <td class="!text-right tabular-nums">{{ p.weekProjected | number: '1.1-1' }}</td>
-              <td class="!text-right tabular-nums">{{ p.weekPoints | number: '1.1-1' }}</td>
-              <td class="!text-right tabular-nums">
-                @if (p.seasonAverage !== null) {
-                  <span [pTooltip]="(p.seasonPoints | number: '1.1-1') + ' pts in ' + p.gamesPlayed + (p.gamesPlayed === 1 ? ' game' : ' games')">
-                    {{ p.seasonAverage | number: '1.1-1' }}
-                  </span>
-                } @else {
-                  <span class="text-surface-500">—</span>
+              @if (r.horizon === 'week') {
+                <td class="whitespace-nowrap">
+                  @if (p.game; as g) {
+                    {{ g.isHome ? 'vs' : '@' }} {{ g.opponent }}
+                  } @else {
+                    <span class="text-surface-500">BYE</span>
+                  }
+                </td>
+                <td>
+                  @if (p.game?.opponentPositionRank; as rank) {
+                    <p-rating [ngModel]="matchupStars(rank)" [readonly]="true" [stars]="5" [pTooltip]="'Opponent ranks ' + rank + ' of 32 against ' + p.position + ' (1 is toughest).'" />
+                  }
+                </td>
+                <td class="!text-right tabular-nums">{{ p.weekProjected | number: '1.1-1' }}</td>
+                <td class="!text-right tabular-nums">{{ p.weekPoints | number: '1.1-1' }}</td>
+                <td class="!text-right tabular-nums">
+                  @if (p.seasonAverage !== null) {
+                    <span [pTooltip]="(p.seasonPoints | number: '1.1-1') + ' pts in ' + p.gamesPlayed + (p.gamesPlayed === 1 ? ' game' : ' games')">
+                      {{ p.seasonAverage | number: '1.1-1' }}
+                    </span>
+                  } @else {
+                    <span class="text-surface-500">—</span>
+                  }
+                </td>
+                <td class="!text-right tabular-nums font-medium">{{ signed(p.value) }}</td>
+              } @else {
+                <td>
+                  @if (p.restOfSeasonSchedule !== null) {
+                    <p-rating [ngModel]="matchupStars(p.restOfSeasonSchedule)" [readonly]="true" [stars]="5" [pTooltip]="scheduleLabel(p.restOfSeasonSchedule)" />
+                  } @else {
+                    <span class="text-surface-500">—</span>
+                  }
+                </td>
+                @if (r.playoffWeeks.length) {
+                  <td>
+                    @if (p.playoffSchedule !== null) {
+                      <p-rating [ngModel]="matchupStars(p.playoffSchedule)" [readonly]="true" [stars]="5" [pTooltip]="scheduleLabel(p.playoffSchedule)" />
+                    } @else {
+                      <span class="text-surface-500">—</span>
+                    }
+                  </td>
                 }
-              </td>
-              <td class="!text-right tabular-nums font-medium">{{ signed(p.value) }}</td>
-              @if (r.horizon === 'restOfSeason') {
                 <td class="!text-right tabular-nums">{{ p.restOfSeason | number: '1.1-1' }}</td>
+                <td class="!text-right tabular-nums font-medium">{{ signed(p.value) }}</td>
+                <td class="!text-right tabular-nums">
+                  @if (p.seasonAverage !== null) {
+                    <span [pTooltip]="(p.seasonPoints | number: '1.1-1') + ' pts in ' + p.gamesPlayed + (p.gamesPlayed === 1 ? ' game' : ' games')">
+                      {{ p.seasonAverage | number: '1.1-1' }}
+                    </span>
+                  } @else {
+                    <span class="text-surface-500">—</span>
+                  }
+                </td>
               }
               <td>
                 @if (t) {
@@ -239,7 +341,7 @@
           </ng-template>
           <ng-template pTemplate="emptymessage">
             <tr>
-              <td [attr.colspan]="r.horizon === 'week' ? 7 : 8" class="text-surface-500">No players match these filters.</td>
+              <td [attr.colspan]="columnCount()" class="text-surface-500">No players match these filters.</td>
             </tr>
           </ng-template>
         </p-table>

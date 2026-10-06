@@ -174,12 +174,23 @@ export interface HistoryWeek {
   opponentPositionRank: number | null;
 }
 
-// A player's weeks before the requested scoring period (empty with none), and ESPN's projection for
-// that period and each later NFL week it's projected above 0 (none for a bye or a player ruled out).
+// One of a player's upcoming NFL games. opponentPositionRank is the opponent's current rank against
+// the player's position, 1 (toughest) to 32 (easiest), or null when unknown.
+export interface ScheduleWeek {
+  week: number;
+  opponent: string;
+  isHome: boolean;
+  opponentPositionRank: number | null;
+}
+
+// A player's weeks before the requested scoring period (empty with none), ESPN's projection for
+// that period and each later NFL week it's projected above 0 (none for a bye or a player ruled out),
+// and their team's games from that period on (none on a bye).
 export interface PlayerHistory {
   playerId: number;
   weeks: HistoryWeek[];
   upcoming: { week: number; projected: number }[];
+  schedule: ScheduleWeek[];
 }
 
 export interface AvailablePlayersRequest extends LeagueTeamsRequest {
@@ -204,6 +215,7 @@ export interface AvailablePlayer {
   points: number;
   weeks: HistoryWeek[];
   upcoming: { week: number; projected: number }[];
+  schedule: ScheduleWeek[];
 }
 
 // One ranked player in a saved snapshot. fantasyTeamId is null unless status is 'ROSTERED';

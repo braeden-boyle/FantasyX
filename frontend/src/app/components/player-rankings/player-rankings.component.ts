@@ -10,13 +10,14 @@ import { InputIconModule } from 'primeng/inputicon';
 import { InputTextModule } from 'primeng/inputtext';
 import { SkeletonModule } from 'primeng/skeleton';
 import { TooltipModule } from 'primeng/tooltip';
+import { RatingModule } from 'primeng/rating';
 import { TeamStateService } from '../../services/team-state.service';
 import { LeagueOutlookService } from '../../services/league-outlook.service';
 import { PlayerRankingsService } from '../../services/player-rankings.service';
 import { ProjectionsService } from '../../services/projections.service';
 import { Player, Standing } from '../../models/team.model';
 import { REPLACEMENT_DEPTH, RankedPlayer, RankingHorizon } from '../../utils/player-rankings';
-import { shortStatus, signed, statusLabel, statusSeverity } from '../../utils/player-format';
+import { matchupStars, shortStatus, signed, statusLabel, statusSeverity } from '../../utils/player-format';
 import { PlayerAvatarComponent } from '../player-avatar/player-avatar.component';
 import { TeamLogoComponent } from '../team-logo/team-logo.component';
 import { ProjectionSourceComponent } from '../projection-source/projection-source.component';
@@ -30,7 +31,11 @@ type SortField =
   | 'restOfSeason'
   | 'weekProjected'
   | 'weekPoints'
-  | 'seasonAverage';
+  | 'seasonAverage'
+  | 'opponent'
+  | 'matchup'
+  | 'restOfSeasonSchedule'
+  | 'playoffSchedule';
 type Availability = 'all' | 'rostered' | 'available';
 
 // Each column's first sort is the way that reads best: highest value first, but rank 1 first.
@@ -40,7 +45,15 @@ const DESCENDING_FIRST: ReadonlySet<SortField> = new Set([
   'weekProjected',
   'weekPoints',
   'seasonAverage',
+  // Easiest matchups and schedules first.
+  'matchup',
+  'restOfSeasonSchedule',
+  'playoffSchedule',
 ]);
+
+// Columns only one of the rankings shows. Switching away from one that's sorted goes back to rank.
+const WEEK_ONLY: ReadonlySet<SortField> = new Set(['weekProjected', 'weekPoints', 'opponent', 'matchup']);
+const REST_OF_SEASON_ONLY: ReadonlySet<SortField> = new Set(['restOfSeason', 'restOfSeasonSchedule', 'playoffSchedule']);
 
 const PAGE_SIZE = 50;
 
@@ -62,6 +75,7 @@ const PAGE_SIZE = 50;
     InputTextModule,
     SkeletonModule,
     TooltipModule,
+    RatingModule,
     PlayerAvatarComponent,
     TeamLogoComponent,
     ProjectionSourceComponent,
@@ -135,9 +149,9 @@ export class PlayerRankingsComponent {
     );
     const { field, descending } = this.sort();
     const compare = this.comparator(field);
-    // Players with no games yet sit below the rest by average, whichever way it runs, and ties keep
-    // rank order.
-    const missing = (p: RankedPlayer) => Number(field === 'seasonAverage' && p.seasonAverage === null);
+    // Players with nothing in the column (no games yet, a bye, no ranked opponents left) sit below the
+    // rest, whichever way it runs, and ties keep rank order.
+    const missing = (p: RankedPlayer) => Number(sortValueMissing(field, p));
     return filtered.sort(
       (a, b) => missing(a) - missing(b) || (descending ? -compare(a, b) : compare(a, b)) || a.rank - b.rank,
     );
@@ -161,6 +175,14 @@ export class PlayerRankingsComponent {
         return (a, b) => a.weekPoints - b.weekPoints;
       case 'seasonAverage':
         return (a, b) => (a.seasonAverage ?? 0) - (b.seasonAverage ?? 0);
+      case 'opponent':
+        return (a, b) => (a.game?.opponent ?? '').localeCompare(b.game?.opponent ?? '');
+      case 'matchup':
+        return (a, b) => (a.game?.opponentPositionRank ?? 0) - (b.game?.opponentPositionRank ?? 0);
+      case 'restOfSeasonSchedule':
+        return (a, b) => (a.restOfSeasonSchedule ?? 0) - (b.restOfSeasonSchedule ?? 0);
+      case 'playoffSchedule':
+        return (a, b) => (a.playoffSchedule ?? 0) - (b.playoffSchedule ?? 0);
     }
   }
 
@@ -190,12 +212,27 @@ export class PlayerRankingsComponent {
     return descending ? 'pi pi-sort-amount-down' : 'pi pi-sort-amount-up-alt';
   }
 
-  // This week's ranking has no ROS column (it would repeat Proj), so a sort on it goes back to rank.
+  // This week's ranking shows this week's projection, points, opponent and matchup; the rest of the
+  // season's, ROS points and strength of schedule instead.
   protected setHorizon(value: RankingHorizon | null): void {
     if (!value) return;
     this.horizon.set(value);
-    if (value === 'week' && this.sort().field === 'restOfSeason') this.sort.set({ field: 'rank', descending: false });
+    const hidden = value === 'week' ? REST_OF_SEASON_ONLY : WEEK_ONLY;
+    if (hidden.has(this.sort().field)) this.sort.set({ field: 'rank', descending: false });
     this.first.set(0);
+  }
+
+  // How many columns are showing, for the empty-table message.
+  protected readonly columnCount = computed(() => {
+    const r = this.rankings();
+    return 5 + (r?.horizon === 'week' ? 4 : 2 + (r?.playoffWeeks.length ? 1 : 0));
+  });
+
+  // Opponent ranks (1 toughest to 32 easiest) show as stars, like the roster's matchups.
+  protected readonly matchupStars = matchupStars;
+
+  protected scheduleLabel(averageRank: number): string {
+    return `Opponents' average rank against the position: ${averageRank.toFixed(1)} of 32 (1 is toughest).`;
   }
 
   // Filtered to one position (not All or FLEX), # counts within it: the WR1 is 1, whatever their
@@ -284,6 +321,23 @@ export class PlayerRankingsComponent {
     if (!player) return;
     this.selectedPlayerId.set(player.playerId);
     this.first.set(Math.floor(index / PAGE_SIZE) * PAGE_SIZE);
+  }
+}
+
+function sortValueMissing(field: SortField, p: RankedPlayer): boolean {
+  switch (field) {
+    case 'seasonAverage':
+      return p.seasonAverage === null;
+    case 'opponent':
+      return p.game === null;
+    case 'matchup':
+      return p.game?.opponentPositionRank == null;
+    case 'restOfSeasonSchedule':
+      return p.restOfSeasonSchedule === null;
+    case 'playoffSchedule':
+      return p.playoffSchedule === null;
+    default:
+      return false;
   }
 }
 

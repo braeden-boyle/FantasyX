@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { AvailablePlayer, LineupSlot, MatchupTeam, Player, PlayerHistory, Standing } from '../models/team.model';
 import {
   PoolPlayer,
+  playoffWeeks,
+  scheduleStrength,
   REPLACEMENT_DEPTH,
   RankingsInput,
   buildPlayerRankings,
@@ -82,12 +84,16 @@ function freeAgent(overrides: Partial<AvailablePlayer>): AvailablePlayer {
     isTeamLogo: false,
     status: 'FREEAGENT',
     percentOwned: 10,
+    schedule: [],
     points: 0,
     weeks: [],
     upcoming: [],
     ...overrides,
   };
 }
+
+// A game against an opponent ranked rank against the position (null when unranked).
+const game = (week: number, rank: number | null) => ({ week, opponent: 'NYJ', isHome: true, opponentPositionRank: rank });
 
 // A projection of points in each of the weeks.
 const upcoming = (points: number, weeks: number[]) => weeks.map((week) => ({ week, projected: points }));
@@ -96,7 +102,13 @@ const upcoming = (points: number, weeks: number[]) => weeks.map((week) => ({ wee
 function smallLeague(available: AvailablePlayer[] | null, histories: PlayerHistory[] = []): RankingsInput {
   const standings = [{ teamId: 1 }, { teamId: 2 }] as Standing[];
   return {
-    league: { standings, scoringPeriodsByMatchupPeriod: { '9': [9], '10': [10], '11': [11, 12] }, lineupSlots: [slot('RB', 1)] },
+    league: {
+      standings,
+      scoringPeriodsByMatchupPeriod: { '9': [9], '10': [10], '11': [11, 12] },
+      // Period 11 (weeks 11-12) is the playoffs.
+      regularSeasonMatchupPeriods: 10,
+      lineupSlots: [slot('RB', 1)],
+    },
     week: {
       scoringPeriod: 10,
       teams: [
@@ -105,9 +117,9 @@ function smallLeague(available: AvailablePlayer[] | null, histories: PlayerHisto
       ],
     },
     histories: [
-      { playerId: 1, weeks: [], upcoming: upcoming(20, [10, 11, 12]) },
+      { playerId: 1, weeks: [], upcoming: upcoming(20, [10, 11, 12]), schedule: [game(10, 30), game(11, 4), game(12, 8)] },
       // On bye in week 11.
-      { playerId: 2, weeks: [], upcoming: upcoming(15, [10, 12]) },
+      { playerId: 2, weeks: [], upcoming: upcoming(15, [10, 12]), schedule: [game(10, 20), game(12, null)] },
       ...histories,
     ],
     available,
@@ -266,6 +278,16 @@ describe('buildPlayerRankings', () => {
     expect(() => snapshotPayload(rankings, { leagueId: 1, season: 2026 })).toThrow();
   });
 
+  it('finds this week’s game and the opponents’ average rank, rest of season and playoffs', () => {
+    const rankings = buildPlayerRankings(smallLeague(available), 'espn')!;
+    expect(rankings.playoffWeeks).toEqual([11, 12]);
+    const [one, two] = rankings.players;
+    expect(one).toMatchObject({ game: { week: 10, opponentPositionRank: 30 }, restOfSeasonSchedule: 14, playoffSchedule: 6 });
+    // On bye in week 11, and an unranked opponent in week 12, which is left out.
+    expect(two).toMatchObject({ restOfSeasonSchedule: 20, playoffSchedule: null });
+    expect(rankings.players[2]).toMatchObject({ game: null, restOfSeasonSchedule: null, playoffSchedule: null });
+  });
+
   it('ranks rostered players only when the available players failed', () => {
     const rankings = buildPlayerRankings(smallLeague(null), 'espn')!;
     expect(rankings.rosteredOnly).toBe(true);
@@ -307,5 +329,18 @@ describe('snapshotPayload', () => {
   it('refuses rostered-only or missing rankings', () => {
     expect(() => snapshotPayload(buildPlayerRankings(smallLeague(null), 'espn'), league)).toThrow();
     expect(() => snapshotPayload(null, league)).toThrow();
+  });
+});
+
+describe('playoffWeeks and scheduleStrength', () => {
+  it('lists the weeks of every matchup period after the regular season', () => {
+    expect(playoffWeeks({ '13': [13], '14': [14], '15': [15], '16': [16, 17] }, 14)).toEqual([15, 16, 17]);
+    expect(playoffWeeks({ '15': [15] }, 0)).toEqual([]);
+  });
+
+  it('averages the ranked opponents in the weeks', () => {
+    const schedule = [game(5, 10), game(6, 20), game(7, null), game(9, 32)];
+    expect(scheduleStrength(schedule, [5, 6, 7, 8])).toBe(15);
+    expect(scheduleStrength(schedule, [7, 8])).toBeNull();
   });
 });
