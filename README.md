@@ -3,7 +3,7 @@ Custom fantasy football dashboard; import your team, get insights, news, and mor
 
 ## Status
 
-Import a team from ESPN (public or private league) and browse its roster, player game logs, the league standings and this week's head-to-head matchups. The matchup view shows each side's live win probability, the first insights feature. A settings switch changes every projection in the app between ESPN's and FantasyX's own (ESPN's adjusted by each player's track record against it this season), with a backtest of both. Optional per-device credential persistence (see below); no accounts.
+Import a team from ESPN (public or private league) and browse its roster, player game logs, the league standings and this week's head-to-head matchups. The matchup view shows each side's live win probability, the first insights feature. A settings switch changes every projection in the app between ESPN's and FantasyX's own (ESPN's adjusted by each player's track record against it this season), with a backtest of both. The league page has power rankings and playoff odds, and the Players page ranks every rostered and available player by rest-of-season value over replacement. Optional per-device credential persistence (see below); no accounts.
 
 ## Structure
 
@@ -44,3 +44,14 @@ cd backend
 dotnet user-secrets set "ConnectionStrings:FantasyX" "<your Supabase session-pooler connection string>"
 dotnet ef database update
 ```
+
+### Weekly player ranking snapshots
+
+A GitHub Actions workflow (`.github/workflows/capture-player-rankings.yml`) saves the league's player rankings every Wednesday in season, for a later backtest. It starts the backend, then runs `npm run capture:rankings` from `frontend/`, which can also be run by hand against a local backend:
+
+```bash
+cd backend
+dotnet user-secrets set "Snapshots:CaptureKey" "<a long random string>"
+```
+
+Then, from `frontend/`, with the backend running, set `LEAGUE_ID`, `CAPTURE_KEY` (the same string), and `ESPN_S2` / `SWID` for a private league, and run `npm run capture:rankings`. Without a capture key configured, the backend's snapshot endpoint answers 404. The workflow reads the same values from repository secrets: `FANTASYX_DB_CONNECTION`, `FANTASYX_LEAGUE_ID`, `ESPN_S2`, `ESPN_SWID` and `SNAPSHOT_CAPTURE_KEY`.
