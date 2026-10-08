@@ -78,6 +78,9 @@
   display: flex;
   align-items: center;
   gap: 0.75rem;
+  color: var(--p-text-color);
+  text-decoration: none;
+  transition: background-color 0.15s ease;
   padding: 1rem;
   min-width: 0;
 }
@@ -99,13 +102,18 @@
   margin-inline-end: auto;
 }
 
-.team-name {
-  font-weight: 600;
-  color: var(--p-text-color);
+/* Each side is a link to the team's roster; the outline is inset because the scoreboard clips overflow. */
+.scoreboard-side:hover {
+  background: var(--p-content-hover-background);
 }
 
-.team-name:hover {
-  text-decoration: underline;
+.scoreboard-side:focus-visible {
+  outline: 2px solid var(--p-primary-400);
+  outline-offset: -2px;
+}
+
+.team-name {
+  font-weight: 600;
 }
 
 /* Win probability: a two-sided bar, the requested team's share on the left. */
@@ -324,6 +332,12 @@
   .scoreboard-side .scoreboard-score {
     align-items: center !important;
     margin: 0;
+  }
+
+  /* Centred items aren't held to the tile's width, so a long team name is capped to make it truncate. */
+  .scoreboard-side > div,
+  .scoreboard-side .team-name {
+    max-width: 100%;
   }
 
   .versus-grid {

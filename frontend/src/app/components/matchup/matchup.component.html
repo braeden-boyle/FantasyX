@@ -90,14 +90,20 @@
     } @else if (m) {
       @if (m.opponent) {
         @let opp = m.opponent;
-        <!-- Scoreboard: the requested team on the left, its opponent mirrored on the right. -->
+        <!-- Scoreboard: the requested team on the left, its opponent mirrored on the right. Each side is a
+             tile that opens that team's roster. -->
         <div class="scoreboard">
           @for (side of [m.team, opp]; track side.team.teamId; let isRight = $last) {
             @let other = isRight ? m.team : opp;
-            <div class="scoreboard-side" [class.side-right]="isRight">
+            <a
+              class="scoreboard-side"
+              [class.side-right]="isRight"
+              [routerLink]="teamLink(side.team.teamId)"
+              [attr.title]="'View ' + side.team.name + ' roster'"
+            >
               <app-team-logo [logoUrl]="side.logoUrl" [abbrev]="side.team.abbrev" size="xlarge" />
               <div class="flex flex-col min-w-0" [class.items-end]="isRight">
-                <a [routerLink]="teamLink(side.team.teamId)" class="team-name truncate">{{ side.team.name }}</a>
+                <span class="team-name truncate">{{ side.team.name }}</span>
                 <span class="text-xs text-surface-500">{{ record(side) }}</span>
                 @if (isLeading(side, other)) {
                   <p-tag severity="success" value="Leading" class="mt-1 w-fit" />
@@ -114,7 +120,7 @@
                   <span class="text-xs text-surface-500 whitespace-nowrap">{{ progress }}</span>
                 }
               </div>
-            </div>
+            </a>
           }
         </div>
 
