@@ -1,6 +1,6 @@
 # FantasyX — Plan
 
-## Status (as of 2026-10-05)
+## Status (as of 2026-10-07)
 
 | Milestone | GitHub issue / branch | State |
 |---|---|---|
@@ -15,6 +15,7 @@
 | v1.7 — Custom projections | #15 `15-add-custom-projections-with-an-espn-fantasyx-setting` | Built and checked against a live league. Not yet merged |
 | v1.8 — Power rankings & playoff odds | #17 `17-add-team-power-rankings-and-playoff-odds` | Built |
 | v1.9 — Player rankings | #19 `19-add-player-rankings` | Built and checked against a mock league; live-league checks still to do |
+| v1.10 — Matchup UI improvements | #21 `21-matchup-ui-improvements` | Built and checked against a mock API; live-league checks still to do |
 
 Sections below were first written as forward-looking plans. v1 and v1.1 are kept as the design record, with corrections where the build turned out differently.
 
@@ -719,3 +720,72 @@ FantasyX's own ranking of every player who matters in the league, rostered or av
   - Step 3: the top 10 at each position against ESPN's rest-of-season rankings, with the rank correlation recorded here, and replacement levels against the best waiver players.
   - A capture run against the real league. Then, after merging, the repo secrets and one manual workflow run.
 - **Live league, after the schedule columns (2026-10-05):** both views show real opponents and stars, for K and D/ST too. This week's opponent and stars match the roster view for all 15 players on a roster, a D/ST and a bye included.
+
+---
+
+# v1.10: Matchup UI improvements (issue #21) — on `21-matchup-ui-improvements`
+
+## Goal
+
+Make the matchup view useful while games are on. Once a player's game starts, the kickoff time gives way to their stat line, an in-progress game shows a live indicator with the clock, scores refresh on their own, and each side shows how many starters are still to play.
+
+## Decisions
+
+- **Live state source:** ESPN's public NFL scoreboard (`site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard`), because the fantasy API has no game clock and `StatsOfficial` can lag the final whistle. It's best-effort: if it fails, the view falls back to the kickoff time (live after kickoff, then final after the game length plus an hour).
+- **Spike (2026-10-07, week 4):** competitor ids are ESPN team ids, the same numbering as the fantasy `proTeamId` (ATL 1, BAL 33, HOU 34, ...). Status is on each event: `period`, `displayClock` and `type.{name, state, completed}`, with `state` one of `pre`/`in`/`post`. The `dates={season}&seasontype=2&week={week}` query returns that NFL week's 16 games.
+- **Player cell:** upcoming games are unchanged. Live games show a pulsing red dot, the clock on `sm+` ("Q3 4:12", "Half", "End Q1", "OT 2:05"), the opponent and the stat line. Final games show the opponent and stat line, or "Final" without stats. The line truncates, with the full text in its tooltip.
+- **Auto-refresh:** about once a minute while any starter in the week is live, otherwise a minute after the next kickoff (never sooner than a minute after the last fetch). It pauses while the tab is hidden, and an overdue refresh fires on return. A failed automatic refresh keeps the scores on screen and retries a minute later. A manual Refresh still shows errors as before.
+- **Starters progress:** "4 to play · 2 live · 3 done" under each scoreboard score, with byes counted as done.
+
+## Backend
+
+- `PlayerDto` gains `StatLine`, `GameState` and `GameDetail`. `GameFinal` is now `StatsOfficial || GameState == "post"`, so win probability settles at the real final.
+- `EspnStatColumns.FormatSummary` builds the stat line from the week's actual `Stats` map, leaving out stats the player didn't record. Rushing and receiving yards are combined into one scrimmage-yards figure, and passing, rushing and receiving TDs into one count: "14 CAR, 3 REC, 93 YD, 2 TD", or "5 REC, 1 CAR, 81 YD, 1 TD" for a receiver. A QB's passing yards are labelled apart from their rushing yards: "18/27, 245 PASS YD, 3 CAR, 12 RUSH YD, 3 TD, 1 INT". Kickers and D/STs read "FG 2/3, XP 3/3" and "2 SACK, 1 INT, 14 PA" (points allowed always shown).
+- `FetchNflGamesAsync` runs after the league call (it needs the scoring period), using an absolute URL on the existing client with no league cookies. It's only applied to players with a fantasy schedule game, so a bye never reads as live. The roster endpoint passes no scoreboard, so the new fields are null there.
+
+## Frontend
+
+- `gamePhase(player, now)` in `utils/player-format.ts`: `none`, `upcoming`, `live` or `final`.
+- `utils/live-refresh.ts`: `nextRefreshDelay`, `phaseCounts` and `formatPhaseCounts`.
+- `WeekMatchupsService.fetchedAt` records when the cached week was fetched. The matchup view judges games (and win probability) against it instead of when the view opened.
+
+## Verification
+
+1. `dotnet build`, `ng build` and Vitest (106 tests, 11 of them new in `live-refresh.spec.ts`).
+2. Against a mock API with games final, in progress and still to come: each cell state rendered as above, the counts added up to the starters, polling was about once a minute while live, and there was no overflow at 375px.
+3. **Still to do on a live league:** `POST /api/espn/matchups` during a game window. Check `statLine`, `gameState` and `gameDetail` for pre, in and post games, a D/ST and a K included, and that the stat lines match ESPN's.
+
+## Follow-up: possession highlight (decided and built 2026-10-07; live check pending)
+
+While a game is live, highlight the rows of players whose team has the ball, the way ESPN's matchup page does.
+
+**Source:** ESPN's NFL scoreboard (already fetched by `FetchNflGamesAsync`) very likely carries `competitions[0].situation` during in-progress games: `possession` (a team id, the same numbering as `proTeamId`), `isRedZone`, `downDistanceText`, timeouts and `lastPlay`. The evidence is that the open-source Home Assistant TeamTracker integration reads `situation.possession` from this same endpoint (`custom_components/teamtracker/set_values.py`). Not yet seen first-hand: on 2026-10-07 no game was live, finished and upcoming games carry no `situation` block, and ESPN's core per-game `situation` endpoint (`sports.core.api.espn.com/.../competitions/{id}/situation`) has no possession field after the final whistle.
+
+**Decisions (asked and answered 2026-10-07):**
+
+1. **What it means:** the highlight follows team possession. It doesn't show whether a particular player is on the field; backups, the second RB and so on lighting up too is fine.
+2. **How it looks:** a highlight on the player's row in the matchup table. No icon or label. Gold (`--p-amber-400`) for has the ball, red inside the 20. A small legend under the starters table explains both (and the D/ST rule), shown only while a game in the matchup is live.
+3. **Which players:** QB, RB, WR, TE and K are highlighted when their team has the ball; the K is treated as offense. D/ST is highlighted when the opponent has the ball.
+4. **Freshness:** the existing 60s auto-refresh is enough. No faster possession-only polling or new endpoint.
+5. **Red zone:** a stronger red-zone variant when the team with the ball is inside the 20. For a D/ST, that means the opponent is in the red zone.
+
+**Still to do (Thursday Night Football, 2026-10-08):** the feature was built before ESPN's live `situation` block could be seen. Capture the live scoreboard a few times during the game and record here:
+- the type and format of `situation.possession`
+- whether it's blank or missing during kickoffs, timeouts, reviews, between quarters and at halftime
+- `isRedZone` and `downDistanceText`
+
+No row is highlighted wherever `possession` is missing.
+
+**As built:**
+- **Backend:** an `EspnNflSituation(Possession, IsRedZone)` record on the scoreboard's competition, read only while the game is in progress. `Possession` is read as raw JSON and accepted as a string or numeric team id, because its live shape is unconfirmed; anything else, or a blank, means no one has the ball. `PlayerDto` gains `PossessionTeam` (the pro team abbreviation) and `RedZone`.
+- **Frontend:** `fieldState(player, now)` in `utils/player-format.ts` returns `none`, `ball` or `redZone` (unit tested). Player cells get `.has-ball` and `.red-zone` classes: a tinted background plus an accent bar on the cell's outer edge, red for the red zone. The state is also added to the cell's `aria-label`, because the highlight is visual only.
+- **Mock proxy:** live games flip possession every few refreshes, with the red zone sometimes on.
+
+**Verified so far:**
+- `dotnet build`. The situation record parsed string, numeric, blank, missing and null `possession` correctly.
+- `ng build`, and Vitest: 110 tests, 4 new for `fieldState`.
+- On the user's league through the mock proxy:
+  - Offense and kickers are highlighted with their team's possession, and D/STs with the opponent's. The red-zone variant shows.
+  - Games without a possession, and upcoming or final games, stay plain.
+  - The accent bar is mirrored on the right team.
+  - Both themes look right, with no overflow at 375px.
