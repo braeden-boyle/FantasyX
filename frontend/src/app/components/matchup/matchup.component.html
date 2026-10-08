@@ -110,6 +110,9 @@
                 @if (teamProjection(side); as projected) {
                   <span class="text-xs text-surface-500 tabular-nums">Proj {{ projected | number: '1.1-1' }}</span>
                 }
+                @if (startersProgress(side); as progress) {
+                  <span class="text-xs text-surface-500 whitespace-nowrap">{{ progress }}</span>
+                }
               </div>
             </div>
           }
@@ -187,6 +190,14 @@
               <span class="font-semibold tabular-nums sm:text-lg">{{ startersPoints(opp) | number: '1.1-1' }}</span>
             </div>
           </div>
+          <!-- What the row highlights mean, shown only while a game in this matchup is live. -->
+          @if (showFieldLegend()) {
+            <div class="field-legend">
+              <span class="legend-item"><span class="legend-swatch has-ball"></span>Has the ball</span>
+              <span class="legend-item"><span class="legend-swatch red-zone"></span>In the red zone</span>
+              <span>D/ST: when the opponent has the ball</span>
+            </div>
+          }
         </section>
 
         <p-panel header="Bench" [toggleable]="true" [collapsed]="true" toggler="header">
@@ -210,12 +221,16 @@
   <!-- One side of a head-to-head row; the right-hand side is mirrored. -->
   <ng-template #playerCell let-player let-other="other" let-right="right">
     @if (player) {
+      <!-- Highlighted while the player's side has the ball (a D/ST's opponent), more strongly inside the 20. -->
+      @let onField = fieldState(player);
       <div
         class="player-cell"
         [class.side-right]="right"
+        [class.has-ball]="onField === 'ball'"
+        [class.red-zone]="onField === 'redZone'"
         role="button"
         tabindex="0"
-        [attr.aria-label]="'Show scoring for ' + player.fullName"
+        [attr.aria-label]="cellLabel(player)"
         (click)="openPlayer(player)"
         (keydown.enter)="openPlayer(player)"
         (keydown.space)="$event.preventDefault(); openPlayer(player)"
@@ -241,11 +256,30 @@
               />
             }
           </div>
-          <span class="text-xs sm:text-sm text-surface-500 truncate max-w-full">
+          <!-- Kickoff until the game starts, then the stat line; a live game leads with a pulsing dot and the clock. -->
+          @let phase = gamePhase(player);
+          <span class="text-xs sm:text-sm text-surface-500 truncate max-w-full" [attr.title]="gameLine(player)">
+            @if (phase === 'live') {
+              <span
+                class="live-dot"
+                role="img"
+                [attr.aria-label]="'Live' + (player.gameDetail ? ', ' + player.gameDetail : '')"
+              ></span>
+              <!-- The clock is dropped on phones; the dot still marks the game as live. -->
+              @if (player.gameDetail) {
+                <span class="live-detail hidden sm:inline">{{ player.gameDetail }} ·</span>
+              }
+            }
             {{ opponentLabel(player) }}
-            @if (player.opponent) {
+            @if (phase === 'upcoming') {
               <!-- Kickoff is dropped on phones to keep the opponent readable. -->
               <span class="hidden sm:inline">{{ formatGameTime(player.gameTimeUtc) }}</span>
+            } @else if (phase === 'live' || phase === 'final') {
+              @if (player.statLine) {
+                · {{ player.statLine }}
+              } @else if (phase === 'final') {
+                · Final
+              }
             }
           </span>
         </div>
