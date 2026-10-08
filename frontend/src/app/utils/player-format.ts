@@ -1,6 +1,37 @@
 import { Player } from '../models/team.model';
+import { GAME_LENGTH_MS } from './win-probability';
 
 // Display helpers shared by the roster table, the matchup view and the player detail drawer.
+
+export type GamePhase = 'none' | 'upcoming' | 'live' | 'final';
+
+// Without ESPN's scoreboard, a game is guessed final this long after kickoff (allowing for overtime
+// and delays), rather than reading live until its stats are made official.
+export const FALLBACK_FINAL_AFTER_MS = GAME_LENGTH_MS + 60 * 60 * 1000;
+
+// Where the player's game this week stands as of `now`: no game (a bye), not started, in progress or
+// over. Follows ESPN's scoreboard when the matchup data has it, and the kickoff time otherwise.
+export function gamePhase(player: Player, now: Date): GamePhase {
+  if (!player.opponent || !player.gameTimeUtc) return 'none';
+  if (player.gameFinal || player.gameState === 'post') return 'final';
+  if (player.gameState === 'in') return 'live';
+  if (player.gameState === 'pre') return 'upcoming';
+  const elapsed = now.getTime() - new Date(player.gameTimeUtc).getTime();
+  if (elapsed < 0) return 'upcoming';
+  return elapsed < FALLBACK_FINAL_AFTER_MS ? 'live' : 'final';
+}
+
+export type FieldState = 'none' | 'ball' | 'redZone';
+
+// Whether the player's side of a live game has the ball: their own team for every position (kickers
+// included), or the opponent for a D/ST, which is on the field when the other team has it. 'redZone'
+// when that's inside the 20. It follows team possession, not whether this player is on the field.
+export function fieldState(player: Player, now: Date): FieldState {
+  if (gamePhase(player, now) !== 'live' || !player.possessionTeam) return 'none';
+  const side = player.position === 'D/ST' ? player.opponent : player.proTeam;
+  if (player.possessionTeam !== side) return 'none';
+  return player.redZone ? 'redZone' : 'ball';
+}
 
 const STARTER_SLOT_ORDER = ['QB', 'RB', 'WR', 'TE', 'FLEX', 'D/ST', 'K'];
 

@@ -78,6 +78,9 @@
   display: flex;
   align-items: center;
   gap: 0.75rem;
+  color: var(--p-text-color);
+  text-decoration: none;
+  transition: background-color 0.15s ease;
   padding: 1rem;
   min-width: 0;
 }
@@ -99,13 +102,18 @@
   margin-inline-end: auto;
 }
 
-.team-name {
-  font-weight: 600;
-  color: var(--p-text-color);
+/* Each side is a link to the team's roster; the outline is inset because the scoreboard clips overflow. */
+.scoreboard-side:hover {
+  background: var(--p-content-hover-background);
 }
 
-.team-name:hover {
-  text-decoration: underline;
+.scoreboard-side:focus-visible {
+  outline: 2px solid var(--p-primary-400);
+  outline-offset: -2px;
+}
+
+.team-name {
+  font-weight: 600;
 }
 
 /* Win probability: a two-sided bar, the requested team's share on the left. */
@@ -201,6 +209,59 @@
   outline-offset: -2px;
 }
 
+/* The player's side has the ball: a gold tint plus an accent bar on the row's outer edge (the left for
+   the left team, the right for the mirrored right team). Red, and a little stronger, inside the 20.
+   The legend's swatches use the same colours. */
+.has-ball {
+  --field-color: var(--p-amber-400);
+  --field-tint: 16%;
+}
+
+.red-zone {
+  --field-color: var(--p-red-500);
+  --field-tint: 16%;
+}
+
+.player-cell.has-ball,
+.player-cell.red-zone,
+.legend-swatch {
+  background: color-mix(in srgb, var(--field-color) var(--field-tint), transparent);
+  box-shadow: inset 3px 0 0 var(--field-color);
+}
+
+.player-cell.has-ball.side-right,
+.player-cell.red-zone.side-right {
+  box-shadow: inset -3px 0 0 var(--field-color);
+}
+
+.player-cell.has-ball:hover,
+.player-cell.red-zone:hover {
+  background: color-mix(in srgb, var(--field-color) calc(var(--field-tint) + 8%), transparent);
+}
+
+.field-legend {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 0.25rem 1rem;
+  margin-top: 0.5rem;
+  font-size: 0.75rem;
+  color: var(--p-text-muted-color);
+}
+
+.legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.legend-swatch {
+  width: 1rem;
+  height: 0.75rem;
+  border-radius: 2px;
+}
+
 .player-cell-empty {
   cursor: default;
   font-size: 0.875rem;
@@ -209,6 +270,41 @@
 
 .player-cell-empty:hover {
   background: none;
+}
+
+/* A player whose game is in progress: a pulsing red dot, then the quarter and clock. The truncated
+   line clips anything outside it, so the start margin and the baseline offset (which centres the
+   dot in the line) leave room for the pulse on every side. */
+.live-dot {
+  display: inline-block;
+  width: 0.5rem;
+  height: 0.5rem;
+  margin-inline: 0.3rem 0.25rem;
+  border-radius: 999px;
+  background: var(--p-red-500);
+  vertical-align: 1px;
+  animation: live-pulse 1.6s ease-in-out infinite;
+}
+
+.live-detail {
+  color: var(--p-red-500);
+  font-weight: 500;
+}
+
+@keyframes live-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--p-red-500) 55%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 0.2rem transparent;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .live-dot {
+    animation: none;
+  }
 }
 
 .total-cell {
@@ -236,6 +332,12 @@
   .scoreboard-side .scoreboard-score {
     align-items: center !important;
     margin: 0;
+  }
+
+  /* Centred items aren't held to the tile's width, so a long team name is capped to make it truncate. */
+  .scoreboard-side > div,
+  .scoreboard-side .team-name {
+    max-width: 100%;
   }
 
   .versus-grid {

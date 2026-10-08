@@ -49,6 +49,11 @@ function rosterPlayer(overrides: Partial<Player>): Player {
     gameTimeUtc: null,
     opponentPositionRank: null,
     gameFinal: false,
+    statLine: null,
+    gameState: null,
+    gameDetail: null,
+    possessionTeam: null,
+    redZone: false,
     ...overrides,
   };
 }

@@ -1,8 +1,8 @@
 import { Component, ElementRef, computed, effect, inject, input, signal, viewChild } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { CommonModule, DOCUMENT } from '@angular/common';
 import { Router, RouterLink } from '@angular/router';
 import { toObservable, toSignal } from '@angular/core/rxjs-interop';
-import { catchError, map, of, scan, startWith, switchMap } from 'rxjs';
+import { catchError, fromEvent, map, of, scan, startWith, switchMap } from 'rxjs';
 import { ButtonModule } from 'primeng/button';
 import { ChipModule } from 'primeng/chip';
 import { DialogModule } from 'primeng/dialog';
@@ -30,8 +30,13 @@ import {
 } from '../../models/team.model';
 import { involves, mineFirst } from '../../utils/league-format';
 import { barShare, barTone, formatChance, winProbability } from '../../utils/win-probability';
+import { formatPhaseCounts, nextRefreshDelay, phaseCounts } from '../../utils/live-refresh';
 import {
+  FieldState,
+  GamePhase,
+  fieldState,
   formatGameTime,
+  gamePhase,
   shortStatus,
   sortStarters,
   statusLabel,
@@ -46,10 +51,12 @@ interface PairedRow {
   right: Player | null;
 }
 
+// silentFailure marks a failed automatic refresh, which keeps the scores already on screen.
 interface WeekLoad {
   week: WeekMatchups | null;
   error: string | null;
   pending: boolean;
+  silentFailure?: boolean;
 }
 
 @Component({
@@ -81,6 +88,7 @@ export class MatchupComponent {
   private readonly playerDetail = inject(PlayerDetailService);
   protected readonly projections = inject(ProjectionsService);
   private readonly router = inject(Router);
+  private readonly document = inject(DOCUMENT);
 
   // Bound from the /matchup/:teamId route param; absent on plain /matchup, which means the user's own matchup.
   readonly teamId = input<string>();
@@ -94,6 +102,9 @@ export class MatchupComponent {
   // instant. Only Refresh refetches it; it also drops cached player breakdowns so they match.
   private readonly reloadCount = signal(0);
   private forceNextLoad = false;
+  private silentNextLoad = false;
+  // When an automatic refresh last failed, so the next attempt waits a full interval.
+  private readonly autoRefreshFailedAt = signal<Date | null>(null);
   private readonly weekRequest = computed(() => {
     const request = this.teamState.importRequest();
     return request ? { request, reload: this.reloadCount() } : null;
@@ -103,21 +114,29 @@ export class MatchupComponent {
       switchMap((weekRequest) => {
         if (!weekRequest) return of(null);
         const force = this.forceNextLoad;
+        const silent = this.silentNextLoad;
         this.forceNextLoad = false;
+        this.silentNextLoad = false;
         return this.weekMatchupsService.load(force).pipe(
           map((week): WeekLoad => ({ week, error: null, pending: false })),
-          catchError((err) =>
-            of<WeekLoad>({ week: null, error: err?.error?.title ?? 'Could not load the matchups.', pending: false }),
-          ),
+          catchError((err) => {
+            if (silent) {
+              this.autoRefreshFailedAt.set(new Date());
+              return of<WeekLoad>({ week: null, error: null, pending: false, silentFailure: true });
+            }
+            return of<WeekLoad>({ week: null, error: err?.error?.title ?? 'Could not load the matchups.', pending: false });
+          }),
           startWith<WeekLoad>({ week: null, error: null, pending: true }),
         );
       }),
-      // A refresh keeps showing the current scores until the new ones arrive.
-      scan(
-        (previous: WeekLoad | null, current: WeekLoad | null) =>
-          current?.pending && previous?.week ? { ...previous, pending: true } : current,
-        null,
-      ),
+      // A refresh keeps showing the current scores until the new ones arrive, and an automatic
+      // refresh that fails keeps them (it's retried later) rather than replacing them with an error.
+      scan((previous: WeekLoad | null, current: WeekLoad | null) => {
+        if (!current || !previous?.week) return current;
+        if (current.pending) return { ...previous, pending: true };
+        if (current.silentFailure) return { ...previous, pending: false };
+        return current;
+      }, null),
     ),
     { initialValue: null },
   );
@@ -151,8 +170,19 @@ export class MatchupComponent {
   // When the scores were fetched, so in-progress games are judged against the same moment.
   private readonly scoresAsOf = computed(() => {
     this.week();
-    return new Date();
+    return this.weekMatchupsService.fetchedAt() ?? new Date();
   });
+
+  // Every starter in the week, since the switcher shows every matchup's score.
+  private readonly weekStarters = computed(() =>
+    (this.week()?.teams ?? []).flatMap((t) => t.team.players.filter((p) => p.starter)),
+  );
+
+  // Automatic refreshes pause while the tab is hidden.
+  private readonly pageVisible = toSignal(
+    fromEvent(this.document, 'visibilitychange').pipe(map(() => this.document.visibilityState === 'visible')),
+    { initialValue: this.document.visibilityState === 'visible' },
+  );
 
   // Hidden on byes and in multi-week playoff rounds, where player projections only cover one week
   // but the matchup totals cover the whole round.
@@ -217,6 +247,19 @@ export class MatchupComponent {
   constructor() {
     // Win probability needs player history whichever projections are showing.
     this.projections.ensureLoaded();
+
+    // Refetch scores about once a minute while any game is live, and shortly after the next kickoff
+    // when none is. A refresh that's overdue (a revisit, or the tab shown again) happens right away.
+    effect((onCleanup) => {
+      const fetchedAt = this.weekMatchupsService.fetchedAt();
+      if (!this.week() || !fetchedAt || this.refreshing() || !this.pageVisible()) return;
+      const failedAt = this.autoRefreshFailedAt();
+      const lastAttempt = failedAt && failedAt > fetchedAt ? failedAt : fetchedAt;
+      const delay = nextRefreshDelay(this.weekStarters(), lastAttempt, new Date());
+      if (delay === null) return;
+      const timer = setTimeout(() => this.autoRefresh(), delay);
+      onCleanup(() => clearTimeout(timer));
+    });
 
     // Keep the current matchup's chip in view as the user steps through them.
     effect(() => {
@@ -291,6 +334,50 @@ export class MatchupComponent {
     this.forceNextLoad = true;
     this.playerDetail.clear();
     this.reloadCount.update((n) => n + 1);
+  }
+
+  private autoRefresh(): void {
+    this.silentNextLoad = true;
+    this.refresh();
+  }
+
+  protected gamePhase(player: Player): GamePhase {
+    return gamePhase(player, this.scoresAsOf());
+  }
+
+  // The highlight legend is only worth showing while a game in this matchup is live.
+  protected readonly showFieldLegend = computed(() => {
+    const m = this.matchup();
+    const now = this.scoresAsOf();
+    return [m?.team, m?.opponent].some((side) => side?.team.players.some((p) => gamePhase(p, now) === 'live'));
+  });
+
+  protected fieldState(player: Player): FieldState {
+    return fieldState(player, this.scoresAsOf());
+  }
+
+  // The player cell's label, which also says what the possession highlight shows.
+  protected cellLabel(player: Player): string {
+    const state = this.fieldState(player);
+    const suffix = state === 'redZone' ? ' (in the red zone)' : state === 'ball' ? ' (has the ball)' : '';
+    return `Show scoring for ${player.fullName}${suffix}`;
+  }
+
+  // "4 to play · 2 live · 3 done" for a side's starters.
+  protected startersProgress(t: MatchupTeam): string {
+    return formatPhaseCounts(phaseCounts(sortStarters(t.team.players), this.scoresAsOf()));
+  }
+
+  // The player cell's game line as plain text, for its tooltip when it's cut off.
+  protected gameLine(player: Player): string {
+    const phase = this.gamePhase(player);
+    const parts = [
+      phase === 'live' ? (player.gameDetail ?? 'Live') : null,
+      this.opponentLabel(player),
+      phase === 'upcoming' ? formatGameTime(player.gameTimeUtc) : null,
+      phase === 'live' || phase === 'final' ? (player.statLine ?? (phase === 'final' ? 'Final' : null)) : null,
+    ];
+    return parts.filter((part) => part).join(' · ');
   }
 
   protected record(t: MatchupTeam): string {

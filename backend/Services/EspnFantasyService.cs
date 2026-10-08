@@ -210,7 +210,7 @@ public class EspnFantasyService : IEspnFantasyService
         var week = league.Status?.LatestScoringPeriod ?? 1;
         var proSchedule = ScheduleForWeek(await FetchProTeamSchedulesAsync(request.Season, cancellationToken), week);
 
-        return ToTeamDto(team, league, week, proSchedule);
+        return ToTeamDto(team, league, week, proSchedule, NoNflGames);
     }
 
     public async Task<WeekMatchupsDto> GetWeekMatchupsAsync(
@@ -232,6 +232,8 @@ public class EspnFantasyService : IEspnFantasyService
         var week = league.Status?.LatestScoringPeriod ?? 1;
         var period = league.Status?.CurrentMatchupPeriod ?? 0;
         var proSchedule = ScheduleForWeek(await schedulesTask, week);
+        // Needs the week from the league call, so it can't run alongside it.
+        var nflGames = await FetchNflGamesAsync(request.Season, week, cancellationToken);
 
         var entries = league.Schedule?
             .Where(entry => entry.MatchupPeriodId == period && entry.Home is not null)
@@ -243,7 +245,8 @@ public class EspnFantasyService : IEspnFantasyService
             .ToDictionary(side => side.TeamId);
 
         var teams = league.Teams?
-            .Select(team => ToMatchupTeamDto(team, sidesByTeamId.GetValueOrDefault(team.Id), league, week, proSchedule))
+            .Select(team => ToMatchupTeamDto(
+                team, sidesByTeamId.GetValueOrDefault(team.Id), league, week, proSchedule, nflGames))
             .ToList() ?? [];
         var matchups = entries
             .Select(entry => new MatchupPairDto(entry.Home!.TeamId, entry.Away?.TeamId))
@@ -268,11 +271,12 @@ public class EspnFantasyService : IEspnFantasyService
         EspnMatchupSide? side,
         EspnLeagueResponse league,
         int week,
-        IReadOnlyDictionary<int, EspnScheduledGame> proSchedule)
+        IReadOnlyDictionary<int, EspnScheduledGame> proSchedule,
+        IReadOnlyDictionary<int, NflGameState> nflGames)
     {
         var score = side is null ? null : ToMatchupSideDto(side);
         return new MatchupTeamDto(
-            ToTeamDto(team, league, week, proSchedule),
+            ToTeamDto(team, league, week, proSchedule, nflGames),
             string.IsNullOrWhiteSpace(team.Logo) ? null : team.Logo,
             score?.Points ?? 0,
             score?.ProjectedPoints);
@@ -282,10 +286,11 @@ public class EspnFantasyService : IEspnFantasyService
         EspnTeam team,
         EspnLeagueResponse league,
         int week,
-        IReadOnlyDictionary<int, EspnScheduledGame> proSchedule)
+        IReadOnlyDictionary<int, EspnScheduledGame> proSchedule,
+        IReadOnlyDictionary<int, NflGameState> nflGames)
     {
         var players = team.Roster?.Entries?
-            .Select(entry => ToPlayerDto(entry, week, proSchedule, league.PositionAgainstOpponent))
+            .Select(entry => ToPlayerDto(entry, week, proSchedule, nflGames, league.PositionAgainstOpponent))
             .ToList() ?? [];
         var overall = team.Record?.Overall;
 
@@ -306,16 +311,21 @@ public class EspnFantasyService : IEspnFantasyService
         EspnRosterEntry entry,
         int week,
         IReadOnlyDictionary<int, EspnScheduledGame> proSchedule,
+        IReadOnlyDictionary<int, NflGameState> nflGames,
         EspnPositionAgainstOpponent? positionalRatings)
     {
         var player = entry.PlayerPoolEntry.Player;
         var game = proSchedule.GetValueOrDefault(player.ProTeamId);
+        // Only trusted alongside a fantasy schedule game, so a bye never reads as live.
+        var nflGame = game is null ? null : nflGames.GetValueOrDefault(player.ProTeamId);
         var isTeamDefense = EspnLookups.IsDefenseSpecialTeams(player.DefaultPositionId);
+        var position = EspnLookups.PositionName(player.DefaultPositionId);
+        var actualStats = ActualStatFor(player, week)?.Stats;
 
         return new PlayerDto(
             player.Id,
             isTeamDefense ? EspnLookups.TeamDefenseName(player.FullName) : player.FullName,
-            EspnLookups.PositionName(player.DefaultPositionId),
+            position,
             EspnLookups.ProTeamAbbrev(player.ProTeamId),
             EspnLookups.SlotName(entry.LineupSlotId),
             EspnLookups.IsStarterSlot(entry.LineupSlotId),
@@ -330,7 +340,12 @@ public class EspnFantasyService : IEspnFantasyService
             game?.IsHome,
             game is null ? null : DateTimeOffset.FromUnixTimeMilliseconds(game.DateMs),
             game is null ? null : PositionRankFor(positionalRatings, player.DefaultPositionId, game.OpponentProTeamId),
-            game?.Final ?? false);
+            (game?.Final ?? false) || nflGame?.State == "post",
+            actualStats is null ? null : EspnStatColumns.FormatSummary(position, actualStats),
+            nflGame?.State,
+            nflGame?.Detail,
+            nflGame?.PossessionProTeamId is int possession ? EspnLookups.ProTeamAbbrev(possession) : null,
+            nflGame?.IsRedZone ?? false);
     }
 
     private static double ProjectedPointsFor(EspnPlayer player, int week) =>
@@ -339,9 +354,10 @@ public class EspnFantasyService : IEspnFantasyService
             .AppliedTotal ?? 0;
 
     private static double ActualPointsFor(EspnPlayer player, int week) =>
-        player.Stats?
-            .FirstOrDefault(stat => stat.ScoringPeriodId == week && stat.StatSourceId == 0)?
-            .AppliedTotal ?? 0;
+        ActualStatFor(player, week)?.AppliedTotal ?? 0;
+
+    private static EspnPlayerStat? ActualStatFor(EspnPlayer player, int week) =>
+        player.Stats?.FirstOrDefault(stat => stat.ScoringPeriodId == week && stat.StatSourceId == 0);
 
     private static int? PositionRankFor(
         EspnPositionAgainstOpponent? positionalRatings, int defaultPositionId, int opponentProTeamId)
@@ -860,6 +876,95 @@ public class EspnFantasyService : IEspnFantasyService
         {
             return [];
         }
+    }
+
+    // A pro team's game this week as ESPN's NFL scoreboard has it. State is "pre", "in" or "post";
+    // Detail is the quarter and clock ("Q3 4:12", "OT 2:05", "Half", "End Q1"), only while in progress.
+    // PossessionProTeamId is the team with the ball and IsRedZone whether it's inside the 20, both only
+    // while in progress and only when ESPN says (it may not during kickoffs, reviews or breaks).
+    private sealed record NflGameState(string State, string? Detail, int? PossessionProTeamId, bool IsRedZone);
+
+    private static readonly IReadOnlyDictionary<int, NflGameState> NoNflGames = new Dictionary<int, NflGameState>();
+
+    // ESPN's public NFL scoreboard, for live game state the fantasy API doesn't have. Best-effort like
+    // the pro schedules: on any failure the matchups still load, just without live state.
+    private async Task<IReadOnlyDictionary<int, NflGameState>> FetchNflGamesAsync(
+        int season, int week, CancellationToken cancellationToken)
+    {
+        try
+        {
+            // An absolute URL overrides the client's fantasy API base address. No league cookies are sent.
+            using var response = await _httpClient.GetAsync(
+                $"https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?dates={season}&seasontype=2&week={week}",
+                cancellationToken);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                return NoNflGames;
+            }
+
+            var scoreboard = await response.Content.ReadFromJsonAsync<EspnNflScoreboardResponse>(
+                EspnJsonOptions, cancellationToken);
+
+            var result = new Dictionary<int, NflGameState>();
+            foreach (var nflEvent in scoreboard?.Events ?? [])
+            {
+                if (nflEvent.Status?.Type?.State is not { } state)
+                {
+                    continue;
+                }
+
+                var competition = nflEvent.Competitions?.FirstOrDefault();
+                var live = state == "in";
+                var possession = live ? PossessionTeamId(competition?.Situation?.Possession) : null;
+                var gameState = new NflGameState(
+                    state,
+                    live ? GameDetail(nflEvent.Status) : null,
+                    possession,
+                    possession is not null && competition?.Situation?.IsRedZone == true);
+                foreach (var competitor in competition?.Competitors ?? [])
+                {
+                    if (int.TryParse(competitor.Id, out var proTeamId))
+                    {
+                        result[proTeamId] = gameState;
+                    }
+                }
+            }
+
+            return result;
+        }
+        catch (Exception ex) when (ex is JsonException or NotSupportedException or HttpRequestException)
+        {
+            return NoNflGames;
+        }
+    }
+
+    // The team id ESPN puts in situation.possession. Expected as a string like the competitor ids, but
+    // a number is accepted too, and anything else (or a blank between plays) means no one has the ball.
+    private static int? PossessionTeamId(JsonElement? possession) =>
+        possession switch
+        {
+            { ValueKind: JsonValueKind.String } element when int.TryParse(element.GetString(), out var id) => id,
+            { ValueKind: JsonValueKind.Number } element when element.TryGetInt32(out var id) => id,
+            _ => null,
+        };
+
+    private static string? GameDetail(EspnNflStatus status)
+    {
+        var quarter = status.Period switch
+        {
+            null or < 1 => null,
+            > 4 => "OT",
+            var period => $"Q{period}",
+        };
+
+        return status.Type?.Name switch
+        {
+            "STATUS_HALFTIME" => "Half",
+            "STATUS_END_PERIOD" when quarter is not null => $"End {quarter}",
+            _ when quarter is not null && !string.IsNullOrEmpty(status.DisplayClock) => $"{quarter} {status.DisplayClock}",
+            _ => quarter,
+        };
     }
 
 
