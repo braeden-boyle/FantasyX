@@ -35,6 +35,11 @@ function player(overrides: Partial<Player> = {}): Player {
     gameTimeUtc: KICKOFF.toISOString(),
     opponentPositionRank: null,
     gameFinal: false,
+    statLine: null,
+    gameState: null,
+    gameDetail: null,
+    possessionTeam: null,
+    redZone: false,
     ...overrides,
   };
 }

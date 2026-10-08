@@ -14,8 +14,19 @@ export interface Player {
   opponentIsHome: boolean | null;
   gameTimeUtc: string | null;
   opponentPositionRank: number | null;
-  // Whether this week's game has ended (official stats). False with no game this week.
+  // Whether this week's game has ended (ESPN's scoreboard says so, or stats are official). False
+  // with no game this week.
   gameFinal: boolean;
+  // A compact summary of this week's stats ("5 REC, 84 YD, 1 TD"), null with none yet.
+  statLine: string | null;
+  // The game's state from ESPN's NFL scoreboard, and its quarter and clock ("Q3 4:12") while in
+  // progress. Both null when the scoreboard isn't available (always, outside the matchup view).
+  gameState: 'pre' | 'in' | 'post' | null;
+  gameDetail: string | null;
+  // The pro team with the ball while the game is in progress, and whether it's inside the 20. Null
+  // and false whenever ESPN's scoreboard doesn't say (between plays, or outside the matchup view).
+  possessionTeam: string | null;
+  redZone: boolean;
 }
 
 export interface Team {
