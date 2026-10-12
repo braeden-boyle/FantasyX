@@ -20,10 +20,12 @@ import { TeamLogoComponent } from '../team-logo/team-logo.component';
 import { PlayerAvatarComponent } from '../player-avatar/player-avatar.component';
 import { ScoringBreakdownComponent } from '../scoring-breakdown/scoring-breakdown.component';
 import { ProjectionSourceComponent } from '../projection-source/projection-source.component';
+import { NflGamesStripComponent, StripSide } from '../nfl-games-strip/nfl-games-strip.component';
 import {
   Matchup,
   MatchupDetail,
   MatchupTeam,
+  NflGame,
   Player,
   PlayerDetail,
   WeekMatchups,
@@ -78,6 +80,7 @@ interface WeekLoad {
     ScoringBreakdownComponent,
     PlayerAvatarComponent,
     ProjectionSourceComponent,
+    NflGamesStripComponent,
   ],
   templateUrl: './matchup.component.html',
   styleUrl: './matchup.component.css',
@@ -168,7 +171,7 @@ export class MatchupComponent {
   protected readonly spreadsFailed = computed(() => this.projections.historyStatus() === 'failed');
 
   // When the scores were fetched, so in-progress games are judged against the same moment.
-  private readonly scoresAsOf = computed(() => {
+  protected readonly scoresAsOf = computed(() => {
     this.week();
     return this.weekMatchupsService.fetchedAt() ?? new Date();
   });
@@ -177,6 +180,26 @@ export class MatchupComponent {
   private readonly weekStarters = computed(() =>
     (this.week()?.teams ?? []).flatMap((t) => t.team.players.filter((p) => p.starter)),
   );
+
+  // The NFL week's games for the strip above the scoreboard (empty when ESPN's scoreboard failed).
+  protected readonly nflGames = computed<NflGame[]>(() => this.week()?.nflGames ?? []);
+  protected readonly teamsOnBye = computed(() => this.week()?.teamsOnBye ?? []);
+
+  // The two sides of this matchup, so each game card counts their starters. None on a bye.
+  protected readonly stripSides = computed<StripSide[]>(() => {
+    const m = this.matchup();
+    if (!m?.opponent) return [];
+    return [m.team, m.opponent].map((side) => ({
+      abbrev: side.team.abbrev,
+      starters: sortStarters(side.team.players),
+    }));
+  });
+
+  // The team a game page goes back to: plain /matchup for the user's own, which needs no param.
+  protected readonly stripLinkTeam = computed(() => {
+    const id = this.requestedTeamId();
+    return id === null || id === this.teamState.myTeamId() ? null : id;
+  });
 
   // Automatic refreshes pause while the tab is hidden.
   private readonly pageVisible = toSignal(
@@ -255,7 +278,8 @@ export class MatchupComponent {
       if (!this.week() || !fetchedAt || this.refreshing() || !this.pageVisible()) return;
       const failedAt = this.autoRefreshFailedAt();
       const lastAttempt = failedAt && failedAt > fetchedAt ? failedAt : fetchedAt;
-      const delay = nextRefreshDelay(this.weekStarters(), lastAttempt, new Date());
+      // NFL games count too, so the strip stays current for a game no starter in the league plays in.
+      const delay = nextRefreshDelay(this.weekStarters(), lastAttempt, new Date(), this.nflGames());
       if (delay === null) return;
       const timer = setTimeout(() => this.autoRefresh(), delay);
       onCleanup(() => clearTimeout(timer));

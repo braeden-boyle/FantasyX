@@ -4,14 +4,18 @@ namespace FantasyX.Backend.Models.Dtos;
 // can switch between matchups without another request. A team missing from Matchups has no
 // matchup this period (e.g. eliminated from the playoffs). Points are totals for the whole matchup
 // period, while each player's points are for ScoringPeriod only; the two differ in multi-week
-// playoff rounds, which ScoringPeriodsInMatchup > 1 flags.
+// playoff rounds, which ScoringPeriodsInMatchup > 1 flags. NflGames is the NFL week's slate in
+// kickoff order and TeamsOnBye the pro teams without a game (abbreviations), both from ESPN's NFL
+// scoreboard and empty when it couldn't be read.
 public record WeekMatchupsDto(
     string LeagueName,
     int MatchupPeriod,
     int ScoringPeriod,
     int ScoringPeriodsInMatchup,
     IReadOnlyList<MatchupTeamDto> Teams,
-    IReadOnlyList<MatchupPairDto> Matchups);
+    IReadOnlyList<MatchupPairDto> Matchups,
+    IReadOnlyList<NflGameDto> NflGames,
+    IReadOnlyList<string> TeamsOnBye);
 
 // Points are 0 and ProjectedPoints null for a team with no matchup. ProjectedPoints is also null
 // when ESPN doesn't send a live projection (e.g. a completed period).

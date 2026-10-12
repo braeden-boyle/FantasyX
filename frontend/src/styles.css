@@ -19,3 +19,33 @@ body {
 .p-avatar-image img {
   object-fit: cover;
 }
+
+/* A game in progress: a pulsing red dot, shared by the matchup view, the NFL games strip and the game
+   page. Truncated lines clip anything outside them, so the start margin and the baseline offset
+   (which centres the dot in the line) leave room for the pulse on every side. */
+.live-dot {
+  display: inline-block;
+  width: 0.5rem;
+  height: 0.5rem;
+  margin-inline: 0.3rem 0.25rem;
+  border-radius: 999px;
+  background: var(--p-red-500);
+  vertical-align: 1px;
+  animation: live-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes live-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--p-red-500) 55%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 0.2rem transparent;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .live-dot {
+    animation: none;
+  }
+}

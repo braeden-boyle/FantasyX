@@ -74,6 +74,17 @@
       </nav>
     }
 
+    <!-- The NFL week's games, each counting this matchup's starters in it. Opens the game's page. -->
+    @if (nflGames().length) {
+      <app-nfl-games-strip
+        [games]="nflGames()"
+        [teamsOnBye]="teamsOnBye()"
+        [sides]="stripSides()"
+        [linkTeam]="stripLinkTeam()"
+        [asOf]="scoresAsOf()"
+      />
+    }
+
     @if (loading()) {
       <div class="flex justify-center mt-10">
         <p-progress-spinner ariaLabel="Loading matchup" />

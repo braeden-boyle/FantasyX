@@ -9,6 +9,8 @@ import {
   ImportTeamRequest,
   League,
   LeagueTeamsRequest,
+  NflGameDetail,
+  NflGameRequest,
   PlayerDetail,
   PlayerDetailRequest,
   PlayerHistory,
@@ -54,5 +56,9 @@ export class EspnApiService {
 
   getDraft(request: LeagueTeamsRequest): Observable<Draft> {
     return this.http.post<Draft>(`${this.baseUrl}/draft`, request);
+  }
+
+  getNflGame(request: NflGameRequest): Observable<NflGameDetail> {
+    return this.http.post<NflGameDetail>(`${this.baseUrl}/nfl-game`, request);
   }
 }

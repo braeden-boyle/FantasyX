@@ -16,6 +16,12 @@ export const routes: Routes = [
   { path: 'team/:teamId', component: TeamDisplayComponent },
   // Plain /matchup is the user's own matchup; /matchup/:teamId is that team's current matchup.
   { path: 'matchup', component: MatchupComponent },
+  // One NFL game from the strip of the week's games. ?team= names the matchup it was opened from.
+  // Loaded on first visit, like /players.
+  {
+    path: 'matchup/game/:gameId',
+    loadComponent: () => import('./components/nfl-game/nfl-game.component').then((m) => m.NflGameComponent),
+  },
   { path: 'matchup/:teamId', component: MatchupComponent },
   // FantasyX's player rankings, rostered and available players alike. Loaded on first visit, to keep
   // its table and filters out of the initial bundle.

@@ -41,9 +41,13 @@ export class App {
   );
 
   // No tab is active while viewing another team or its matchup (/team/:teamId, /matchup/:teamId) or the import page.
-  // The power rankings page (/league/rankings) belongs to League.
+  // The power rankings page (/league/rankings) belongs to League, and NFL game pages (/matchup/game/:id) to Matchup.
   protected readonly activeTab = computed(() => {
-    const url = this.url().startsWith('/league/') ? '/league' : this.url();
+    const url = this.url().startsWith('/league/')
+      ? '/league'
+      : this.url().startsWith('/matchup/game/')
+        ? '/matchup'
+        : this.url();
     return this.tabs.find((t) => t.route === url)?.route ?? '';
   });
 

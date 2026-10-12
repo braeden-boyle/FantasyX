@@ -1,0 +1,48 @@
+<nav class="nfl-strip" aria-label="This week's NFL games">
+  <div #track class="nfl-track">
+    @for (game of games(); track game.eventId) {
+      @let gamePhase = phase(game);
+      @let gameCounts = counts(game);
+      <a
+        class="nfl-card"
+        [class.nfl-card-quiet]="gameCounts.length > 0 && !gameCounts[0] && !gameCounts[1]"
+        [routerLink]="['/matchup/game', game.eventId]"
+        [queryParams]="queryParams()"
+        [attr.aria-current]="game.eventId === currentGameId() ? 'page' : null"
+        [attr.aria-label]="cardLabel(game)"
+      >
+        <span class="nfl-status" [class.nfl-status-live]="gamePhase === 'live'">
+          @if (gamePhase === 'live') {
+            <span class="live-dot"></span>
+          }
+          {{ status(game) }}
+        </span>
+        <!-- Away team above home, as ESPN lists them. The team with the ball is tinted, red inside the 20. -->
+        @for (team of [game.away, game.home]; track team.proTeamId) {
+          @let field = fieldState(game, team);
+          <span class="nfl-team" [class.has-ball]="field === 'ball'" [class.red-zone]="field === 'redZone'">
+            <app-nfl-team-mark [abbrev]="team.abbrev" />
+            <span class="flex-1">{{ team.abbrev }}</span>
+            @if (team.score !== null) {
+              <span class="tabular-nums" [class.font-semibold]="isWinner(game, team)">{{ team.score }}</span>
+            }
+          </span>
+        }
+        <!-- How many of each matchup side's starters play in this game. -->
+        @if (gameCounts.length === 2) {
+          <span class="nfl-counts">
+            <span [class.nfl-count-some]="gameCounts[0] > 0">{{ sides()[0].abbrev }} {{ gameCounts[0] }}</span>
+            <span aria-hidden="true">·</span>
+            <span [class.nfl-count-some]="gameCounts[1] > 0">{{ sides()[1].abbrev }} {{ gameCounts[1] }}</span>
+          </span>
+        }
+      </a>
+    }
+    @if (teamsOnBye().length) {
+      <span class="nfl-bye">
+        <span class="font-medium">Bye</span>
+        <span>{{ teamsOnBye().join(', ') }}</span>
+      </span>
+    }
+  </div>
+</nav>

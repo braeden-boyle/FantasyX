@@ -1,0 +1,371 @@
+@if (!teamState.importRequest()) {
+  <div class="max-w-xl mx-auto mt-10 p-4 text-center text-surface-500">
+    No team imported yet. <a routerLink="/import" class="text-primary-600 underline">Go import one</a>.
+  </div>
+} @else {
+  <div class="max-w-6xl mx-auto mt-10 p-4 flex flex-col gap-6">
+    @if (stripGames().length) {
+      <app-nfl-games-strip
+        [games]="stripGames()"
+        [teamsOnBye]="teamsOnBye()"
+        [sides]="stripSides()"
+        [currentGameId]="gameId()"
+        [linkTeam]="stripLinkTeam()"
+        [asOf]="stripAsOf()"
+      />
+    }
+
+    <div class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+      <!-- An outlined pill, like the roster page's "View Matchup", naming the matchup it goes back to. -->
+      <a pButton [routerLink]="backLink()" [outlined]="true" [rounded]="true" size="small" class="back-pill">
+        <i class="pi pi-arrow-left" pButtonIcon></i>
+        <span pButtonLabel>{{ backLabel() }}</span>
+      </a>
+      <p-button
+        label="Refresh"
+        icon="pi pi-refresh"
+        [text]="true"
+        size="small"
+        [loading]="refreshing()"
+        (onClick)="refresh()"
+      />
+    </div>
+
+    @if (loading()) {
+      <div class="flex justify-center mt-10">
+        <p-progress-spinner ariaLabel="Loading game" />
+      </div>
+    } @else if (errorMessage()) {
+      @let message = errorMessage()!;
+      <div class="flex flex-col items-start gap-3">
+        <p-message severity="error" [text]="message" class="w-full" />
+        <p-button label="Retry" icon="pi pi-refresh" size="small" (onClick)="refresh()" />
+      </div>
+    } @else if (detail()) {
+      @let d = detail()!;
+      @let game = d.game;
+      @let gamePhase = phase(game);
+
+      <!-- Scoreboard: away on the left, home on the right, the status and quarter scores between. -->
+      <section class="game-header" aria-label="Score">
+        @for (team of [game.away, game.home]; track team.proTeamId; let isHome = $last) {
+          @let field = fieldState(game, team);
+          <div
+            class="header-team"
+            [class.side-right]="isHome"
+            [class.has-ball]="field === 'ball'"
+            [class.red-zone]="field === 'redZone'"
+            [style.order]="isHome ? 3 : 1"
+          >
+            <app-nfl-team-mark class="header-mark" [abbrev]="team.abbrev" size="badge" />
+            <div class="flex flex-col min-w-0" [class.items-end]="isHome">
+              <span class="font-semibold truncate max-w-full">{{ team.name }}</span>
+              <span class="text-xs text-surface-500">
+                {{ team.record }}
+                @if (field !== 'none') {
+                  · <span class="field-label">{{ field === 'redZone' ? 'Red zone' : 'Ball' }}</span>
+                }
+              </span>
+            </div>
+            <span class="header-score tabular-nums" [class.font-semibold]="isWinner(game, team)">
+              {{ team.score ?? '' }}
+            </span>
+          </div>
+        }
+        <div class="header-status" [style.order]="2">
+          @switch (gamePhase) {
+            @case ('live') {
+              <span class="live-status"><span class="live-dot"></span>{{ game.detail ?? 'Live' }}</span>
+              @if (game.downDistance) {
+                <span class="text-xs text-surface-500 text-center">{{ game.downDistance }}</span>
+              }
+            }
+            @case ('final') {
+              <span class="font-medium">{{ game.statusText || 'Final' }}</span>
+            }
+            @default {
+              <span class="font-medium">{{ formatGameTime(game.kickoffUtc) ?? game.statusText }}</span>
+              @if (game.broadcast) {
+                <span class="text-xs text-surface-500">{{ game.broadcast }}</span>
+              }
+            }
+          }
+        </div>
+      </section>
+
+      @if (linescoreColumns().length) {
+        <div class="overflow-x-auto">
+          <table class="linescore" aria-label="Score by quarter">
+            <thead>
+              <tr>
+                <th scope="col"><span class="sr-only">Team</span></th>
+                @for (column of linescoreColumns(); track $index) {
+                  <th scope="col">{{ column }}</th>
+                }
+                <th scope="col">T</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (team of [game.away, game.home]; track team.proTeamId) {
+                <tr>
+                  <th scope="row">{{ team.abbrev }}</th>
+                  @for (column of linescoreColumns(); track $index) {
+                    <td>{{ team.linescores[$index] }}</td>
+                  }
+                  <td class="font-semibold">{{ team.score ?? '' }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+
+      <!-- The most recent play while the game is on; the last score once it's over; kickoff before. -->
+      <section class="card" aria-labelledby="last-play-heading">
+        @switch (gamePhase) {
+          @case ('live') {
+            <div class="flex flex-wrap items-center gap-2 mb-1">
+              <h2 id="last-play-heading" class="card-heading">Last play</h2>
+              @if (d.lastPlay; as play) {
+                <span class="text-xs text-surface-500">
+                  {{ playClock(play) }}
+                  @if (play.teamAbbrev) {
+                    · {{ play.teamAbbrev }}
+                  }
+                </span>
+                @if (play.scoring) {
+                  <p-tag severity="success" value="Score" />
+                }
+              }
+            </div>
+            @if (d.lastPlay; as play) {
+              <p>{{ play.text }}</p>
+            } @else {
+              <p class="text-surface-500">Waiting for the first play.</p>
+            }
+            @if (d.currentDrive?.description) {
+              <p class="text-xs text-surface-500 mt-2">
+                Current drive{{ d.currentDrive!.teamAbbrev ? ' (' + d.currentDrive!.teamAbbrev + ')' : '' }}:
+                {{ d.currentDrive!.description }}
+              </p>
+            }
+          }
+          @case ('final') {
+            <h2 id="last-play-heading" class="card-heading mb-1">Final</h2>
+            <p>
+              {{ game.away.abbrev }} {{ game.away.score }}, {{ game.home.abbrev }} {{ game.home.score }}
+              @if (game.statusText && game.statusText !== 'Final') {
+                <span class="text-surface-500">({{ game.statusText }})</span>
+              }
+            </p>
+            @if (lastScore(); as play) {
+              <p class="text-sm text-surface-500 mt-1">Last score, {{ playClock(play) }}: {{ play.text }}</p>
+            }
+          }
+          @default {
+            <h2 id="last-play-heading" class="card-heading mb-1">Kickoff</h2>
+            <p>
+              {{ formatGameTime(game.kickoffUtc) ?? game.statusText }}
+              @if (game.broadcast) {
+                <span class="text-surface-500">on {{ game.broadcast }}</span>
+              }
+            </p>
+          }
+        }
+      </section>
+
+      <div class="grid gap-6 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] items-start">
+        <section aria-labelledby="fantasy-heading">
+          <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
+            <h2 id="fantasy-heading" class="text-lg font-medium">
+              {{ gamePhase === 'upcoming' ? 'Fantasy players to watch' : 'Top fantasy players' }}
+            </h2>
+            <app-projection-source />
+          </div>
+          <ng-container *ngTemplateOutlet="ownerLegend" />
+          @if (visibleFantasyRows(); as rows) {
+            @if (rows.length) {
+              <ul class="fantasy-list">
+                @for (row of rows; track row.player.playerId) {
+                  @let p = row.player;
+                  <li class="fantasy-row">
+                    <ng-container *ngTemplateOutlet="ownerDot; context: { $implicit: row.owner }" />
+                    <div class="flex flex-col min-w-0 flex-1">
+                      <div class="flex items-center gap-1.5 min-w-0">
+                        <span class="truncate font-medium">{{ p.fullName }}</span>
+                        @if (p.injuryStatus && p.injuryStatus !== 'ACTIVE') {
+                          <p-tag
+                            [severity]="statusSeverity(p.injuryStatus)"
+                            [value]="shortStatus(p.injuryStatus)"
+                            [attr.title]="statusLabel(p.injuryStatus)"
+                            [attr.aria-label]="statusLabel(p.injuryStatus)"
+                            class="injury-tag shrink-0"
+                          />
+                        }
+                      </div>
+                      <span class="text-xs text-surface-500">{{ p.position }} · {{ p.proTeam }}</span>
+                      @if (p.statLine) {
+                        <span class="text-xs sm:text-sm text-surface-500 truncate" [attr.title]="p.statLine">
+                          {{ p.statLine }}
+                        </span>
+                      }
+                    </div>
+                    <div class="flex flex-col items-end shrink-0">
+                      @if (gamePhase !== 'upcoming') {
+                        <span class="tabular-nums font-semibold sm:text-lg">{{ p.points | number: '1.1-1' }}</span>
+                      }
+                      <span class="text-xs text-surface-500 tabular-nums">
+                        Proj {{ (row.projected | number: '1.1-1') ?? '—' }}
+                      </span>
+                    </div>
+                  </li>
+                }
+              </ul>
+              @if (hiddenPlayerCount() > 0) {
+                <p-button
+                  [label]="showAllPlayers() ? 'Show fewer' : 'Show all (' + hiddenPlayerCount() + ' more)'"
+                  [text]="true"
+                  size="small"
+                  (onClick)="showAllPlayers.set(!showAllPlayers())"
+                />
+              }
+            } @else {
+              <p class="text-surface-500 text-sm">No fantasy points yet.</p>
+            }
+          } @else {
+            <p class="text-surface-500 text-sm">
+              <i class="pi pi-exclamation-circle text-xs"></i>
+              Fantasy points unavailable: your league's players couldn't be loaded.
+            </p>
+          }
+        </section>
+
+        @if (d.teamStats.length) {
+          <section aria-labelledby="team-stats-heading">
+            <h2 id="team-stats-heading" class="text-lg font-medium mb-2">Team stats</h2>
+            <div class="team-stats">
+              <div class="stat-head">{{ game.away.abbrev }}</div>
+              <div class="stat-head"><span class="sr-only">Stat</span></div>
+              <div class="stat-head">{{ game.home.abbrev }}</div>
+              @for (stat of d.teamStats; track stat.label) {
+                <div class="stat-value">{{ stat.away }}</div>
+                <div class="stat-label">{{ stat.label }}</div>
+                <div class="stat-value">{{ stat.home }}</div>
+              }
+            </div>
+          </section>
+        }
+      </div>
+
+      @if (d.boxScore.length) {
+        @let box = boxScoreFor(d.boxScore)!;
+        <section aria-labelledby="box-score-heading">
+          <h2 id="box-score-heading" class="text-lg font-medium mb-2">Box score</h2>
+          <ng-container *ngTemplateOutlet="ownerLegend" />
+          <p-tabs [value]="box.teamAbbrev" (valueChange)="boxTeam.set($any($event))">
+            <p-tablist>
+              @for (team of d.boxScore; track team.teamAbbrev) {
+                <p-tab [value]="team.teamAbbrev">{{ team.teamAbbrev }}</p-tab>
+              }
+            </p-tablist>
+          </p-tabs>
+          <div class="box-grid mt-3">
+            @for (category of box.categories; track category.name) {
+              @let columns = visibleColumns(category);
+              <div class="overflow-x-auto">
+                <table class="box-table">
+                  <caption>{{ categoryTitle(category.name) }}</caption>
+                  <thead>
+                    <tr>
+                      <th scope="col" class="text-left">Player</th>
+                      @for (i of columns; track i) {
+                        <th scope="col">{{ category.labels[i] }}</th>
+                      }
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (row of category.rows; track $index) {
+                      <tr>
+                        <th scope="row" class="text-left font-normal">
+                          <span class="inline-flex items-center gap-2">
+                            <ng-container *ngTemplateOutlet="ownerDot; context: { $implicit: ownerOf(row.playerId) }" />
+                            {{ row.name }}
+                          </span>
+                        </th>
+                        @for (i of columns; track i) {
+                          <td>{{ row.stats[i] }}</td>
+                        }
+                      </tr>
+                    }
+                  </tbody>
+                  @if (category.totals.length && category.rows.length > 1) {
+                    <tfoot>
+                      <tr>
+                        <th scope="row" class="text-left">Team</th>
+                        @for (i of columns; track i) {
+                          <td>{{ category.totals[i] }}</td>
+                        }
+                      </tr>
+                    </tfoot>
+                  }
+                </table>
+              </div>
+            }
+          </div>
+        </section>
+      }
+
+      @if (scoringByQuarter().length) {
+        <section aria-labelledby="scoring-heading">
+          <h2 id="scoring-heading" class="text-lg font-medium mb-2">Scoring summary</h2>
+          @for (group of scoringByQuarter(); track $index) {
+            <h3 class="quarter-heading">{{ periodName(group.period) }}</h3>
+            <ul class="scoring-list">
+              @for (play of group.plays; track $index) {
+                <li class="scoring-row">
+                  <span class="scoring-team">{{ play.teamAbbrev }}</span>
+                  <div class="flex flex-col min-w-0 flex-1">
+                    <span class="text-sm">{{ play.text }}</span>
+                    <span class="text-xs text-surface-500">{{ play.clock }} · {{ play.type }}</span>
+                  </div>
+                  @if (play.awayScore !== null && play.homeScore !== null) {
+                    <span class="text-sm tabular-nums whitespace-nowrap">
+                      {{ play.awayScore }}–{{ play.homeScore }}
+                    </span>
+                  }
+                </li>
+              }
+            </ul>
+          }
+        </section>
+      }
+    }
+  </div>
+
+  <!-- A player rostered by either side of the matchup: filled for a starter, a ring on the bench. An
+       invisible dot keeps everyone else's name lined up. -->
+  <ng-template #ownerDot let-owner>
+    @if (owner) {
+      <span
+        class="owner-dot"
+        [class.owner-opponent]="owner.side === 'opponent'"
+        [class.owner-bench]="!owner.starter"
+        role="img"
+        [attr.aria-label]="ownerLabel(owner)"
+        [attr.title]="ownerLabel(owner)"
+      ></span>
+    } @else {
+      <span class="owner-dot owner-none" aria-hidden="true"></span>
+    }
+  </ng-template>
+
+  <ng-template #ownerLegend>
+    @if (legend(); as names) {
+      <div class="owner-legend">
+        <span class="legend-item"><span class="owner-dot"></span>{{ names.team }}</span>
+        <span class="legend-item"><span class="owner-dot owner-opponent"></span>{{ names.opponent }}</span>
+        <span class="legend-item"><span class="owner-dot owner-bench"></span>On the bench</span>
+      </div>
+    }
+  </ng-template>
+}

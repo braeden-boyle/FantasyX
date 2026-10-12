@@ -72,6 +72,28 @@ Content-Type: application/json
   "perPosition": 50
 }
 
+### Get one NFL game's summary: last play, scoring plays, team stats, box score, and both teams' players scored with the league's settings
+POST {{FantasyX.Backend_HostAddress}}/api/espn/nfl-game
+Content-Type: application/json
+
+{
+  "leagueId": 123456,
+  "season": 2026,
+  "scoringPeriod": 5,
+  "eventId": "401872991"
+}
+
+### An unknown NFL game (expect a mapped 404)
+POST {{FantasyX.Backend_HostAddress}}/api/espn/nfl-game
+Content-Type: application/json
+
+{
+  "leagueId": 123456,
+  "season": 2026,
+  "scoringPeriod": 5,
+  "eventId": "1"
+}
+
 ### Get the draft (every pick with its week 1 projection, plus the starting lineup slots)
 POST {{FantasyX.Backend_HostAddress}}/api/espn/draft
 Content-Type: application/json

@@ -109,7 +109,8 @@ export interface MatchupTeam {
 
 // The current week from POST /api/espn/matchups: every team plus who plays whom. A team missing
 // from matchups has no matchup this period; awayTeamId is null for a bye. scoringPeriodsInMatchup
-// is more than 1 in multi-week playoff rounds.
+// is more than 1 in multi-week playoff rounds. nflGames is the NFL week's slate in kickoff order and
+// teamsOnBye the pro teams without a game, both empty when ESPN's NFL scoreboard couldn't be read.
 export interface WeekMatchups {
   leagueName: string;
   matchupPeriod: number;
@@ -117,6 +118,93 @@ export interface WeekMatchups {
   scoringPeriodsInMatchup: number;
   teams: MatchupTeam[];
   matchups: { homeTeamId: number; awayTeamId: number | null }[];
+  nflGames: NflGame[];
+  teamsOnBye: string[];
+}
+
+// One NFL game from ESPN's scoreboard. detail is the quarter and clock ("Q3 4:12", "Half") and
+// statusText ESPN's own line ("Final/OT", "10/12 - 8:15 PM EDT"). possessionTeam, redZone,
+// downDistance ("3rd & 7 at ARI 21") and lastPlay are only set while the game is in progress.
+export interface NflGame {
+  eventId: string;
+  kickoffUtc: string | null;
+  state: 'pre' | 'in' | 'post';
+  detail: string | null;
+  statusText: string;
+  away: NflGameTeam;
+  home: NflGameTeam;
+  possessionTeam: string | null;
+  redZone: boolean;
+  downDistance: string | null;
+  lastPlay: string | null;
+  broadcast: string | null;
+}
+
+// abbrev matches Player.proTeam. score is null before kickoff; linescores (points per quarter, then
+// overtime) are only filled in on the game summary.
+export interface NflGameTeam {
+  proTeamId: number;
+  abbrev: string;
+  name: string;
+  score: number | null;
+  record: string | null;
+  linescores: string[];
+}
+
+export interface NflGameRequest extends LeagueTeamsRequest {
+  scoringPeriod: number;
+  eventId: string;
+}
+
+// One game's summary from POST /api/espn/nfl-game. teamStats and boxScore are empty before kickoff.
+// fantasyPlayers are both teams' players under the league's scoring, best first; null when the
+// league's player pool couldn't be read.
+export interface NflGameDetail {
+  game: NflGame;
+  lastPlay: NflPlay | null;
+  currentDrive: { teamAbbrev: string | null; description: string | null } | null;
+  scoringPlays: NflPlay[];
+  teamStats: { label: string; away: string; home: string }[];
+  boxScore: NflBoxScoreTeam[];
+  fantasyPlayers: NflFantasyPlayer[] | null;
+}
+
+// awayScore and homeScore are the score after the play, sent for scoring plays.
+export interface NflPlay {
+  text: string;
+  type: string | null;
+  period: number | null;
+  clock: string | null;
+  teamAbbrev: string | null;
+  scoring: boolean;
+  awayScore: number | null;
+  homeScore: number | null;
+  downDistance: string | null;
+}
+
+// Each row's stats and the totals line up with labels. playerId is the fantasy player id.
+export interface NflBoxScoreTeam {
+  teamAbbrev: string;
+  categories: {
+    name: 'passing' | 'rushing' | 'receiving' | 'kicking';
+    labels: string[];
+    rows: { playerId: number | null; name: string; stats: string[] }[];
+    totals: string[];
+  }[];
+}
+
+// Identity matches Player. points are this week's under the league's scoring, projectedPoints ESPN's.
+export interface NflFantasyPlayer {
+  playerId: number;
+  fullName: string;
+  position: string;
+  proTeam: string;
+  injuryStatus: string | null;
+  headshotUrl: string;
+  isTeamLogo: boolean;
+  points: number;
+  projectedPoints: number | null;
+  statLine: string | null;
 }
 
 // One team's matchup, assembled client-side from WeekMatchups. opponent is null when the team
