@@ -272,39 +272,10 @@
   background: none;
 }
 
-/* A player whose game is in progress: a pulsing red dot, then the quarter and clock. The truncated
-   line clips anything outside it, so the start margin and the baseline offset (which centres the
-   dot in the line) leave room for the pulse on every side. */
-.live-dot {
-  display: inline-block;
-  width: 0.5rem;
-  height: 0.5rem;
-  margin-inline: 0.3rem 0.25rem;
-  border-radius: 999px;
-  background: var(--p-red-500);
-  vertical-align: 1px;
-  animation: live-pulse 1.6s ease-in-out infinite;
-}
-
+/* A player whose game is in progress: the shared pulsing .live-dot (styles.css), then the quarter and clock. */
 .live-detail {
   color: var(--p-red-500);
   font-weight: 500;
-}
-
-@keyframes live-pulse {
-  0%,
-  100% {
-    box-shadow: 0 0 0 0 color-mix(in srgb, var(--p-red-500) 55%, transparent);
-  }
-  50% {
-    box-shadow: 0 0 0 0.2rem transparent;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .live-dot {
-    animation: none;
-  }
 }
 
 .total-cell {
