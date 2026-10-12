@@ -1,6 +1,6 @@
 # FantasyX — Plan
 
-## Status (as of 2026-10-07)
+## Status (as of 2026-10-12)
 
 | Milestone | GitHub issue / branch | State |
 |---|---|---|
@@ -16,6 +16,7 @@
 | v1.8 — Power rankings & playoff odds | #17 `17-add-team-power-rankings-and-playoff-odds` | Built |
 | v1.9 — Player rankings | #19 `19-add-player-rankings` | Built and checked against a mock league; live-league checks still to do |
 | v1.10 — Matchup UI improvements | #21 `21-matchup-ui-improvements` | Built and checked against a mock API; live-league checks still to do |
+| v1.11 — NFL scoreboard | No issue yet; `23-nfl-scoreboard` | Built; checked against ESPN, a mock API and the live league. Live-game checks still to do |
 
 Sections below were first written as forward-looking plans. v1 and v1.1 are kept as the design record, with corrections where the build turned out differently.
 
@@ -789,3 +790,129 @@ No row is highlighted wherever `possession` is missing.
   - Games without a possession, and upcoming or final games, stay plain.
   - The accent bar is mirrored on the right team.
   - Both themes look right, with no overflow at 375px.
+
+---
+
+# v1.11: NFL scoreboard (branch `23-nfl-scoreboard`, no issue yet)
+
+## Goal
+
+Show the real NFL games behind the matchup. The week's slate runs as a ticker on the matchup view, and each game has its own page: the last play, the top fantasy players, team stats, the box score and the scoring summary. It's the complement that explains the matchup's state.
+
+## Decisions (asked 2026-10-12)
+
+- **Placement:** a horizontally scrolling strip of mini scores above the matchup scoreboard, under the matchup switcher, like ESPN's ticker. There's no new nav tab.
+- **Game page:** its own lazy route, `/matchup/game/:gameId`, with the same strip at the top. `?team=` carries the matchup it was opened from (left out for your own), so Back returns there and the strip's counts follow it. The Matchup tab stays lit.
+- **Weeks:** the current scoring period only.
+- **Fantasy tie-in:**
+  - Each card counts the starters on both sides of the viewed matchup ("GURU 2 · SCAR 1"), and dims games neither side has anyone in.
+  - Top fantasy players use league scoring.
+  - Cards reuse v1.10's possession tint (gold, red in the red zone).
+  - There are no per-player owner tags.
+- **No NFL logos** (changed after the first build): teams are drawn in their colours, as a dot on the strip and a badge in the game header. See Frontend.
+- **Ownership by colour** (changed after the first build): on the game page, players on either side of the viewed matchup get a coloured dot with a legend, replacing headshots and fantasy-team logos. See Frontend.
+
+## Spike (2026-10-12, week 5)
+
+- **Scoreboard** (`site.api.espn.com/.../nfl/scoreboard?dates={season}&seasontype=2&week={week}`):
+  - Each event has `id` and `date` (no seconds: "2026-10-16T00:15Z").
+  - Competitors have `homeAway`, `score` (a string) and `records[0].summary`.
+  - The event also has `status.type.shortDetail` ("Final/OT", "10/12 - 8:15 PM EDT") and `broadcasts[].names`.
+  - `week.teamsOnBye` lists the teams on bye.
+- **Summary** (`.../nfl/summary?event={id}`, about 590 KB):
+  - `header.competitions[0]` has the status and `broadcasts[].media.shortName`. Its competitors have `record` (not `records`), `linescores` and a `possession` bool.
+  - The box score has `boxscore.teams[].statistics` (label/displayValue pairs) and `boxscore.players[].statistics[]`: categories with `labels`, `athletes` and `totals`.
+  - `drives.previous[]` holds each drive's `description` and `plays[]`; each play has `start.downDistanceText`.
+  - `scoringPlays[]` carries the team and the running score.
+  - Athlete ids equal fantasy player ids.
+  - Before kickoff there are no drives, and the box score has 8 season-average team stats and no players.
+  - A bad id answers 404.
+- **Fantasy pool:** `kona_player_info` takes `filterProTeamIds`, `filterSlotIds`, `filterStatsForScoringPeriodIds`, `sortPercOwned` and `limit` together. It returns both teams' players with their week actuals and projections, D/ST and K included. Confirmed on `leaguedefaults/3`, then on the real league.
+- **Still to see live** (MNF 2026-10-12, or TNF 2026-10-15):
+  - the scoreboard's `situation.{possession, isRedZone, downDistanceText, lastPlay}`
+  - whether the summary has a top-level `situation` and `drives.current`
+  
+  Until then, the uncertain fields are read as raw JSON, so an unexpected shape reads as missing. Seeing them live also settles v1.10's open possession check.
+
+## Backend
+
+- **Scoreboard:**
+  - `EspnNflScoreboard.cs` gains nullable fields only.
+  - `FetchNflGamesAsync` became `FetchNflScoreboardAsync`. It returns the per-team states (unchanged for player rows), the games in kickoff order, and the bye teams.
+- **Week of matchups:** `WeekMatchupsDto` gains `NflGames` (`NflGameDto`) and `TeamsOnBye`, both empty when the scoreboard fails. Teams are identified by id, abbreviation and name; there are no logo URLs.
+- **`POST /api/espn/nfl-game`** takes `NflGameRequest { leagueId, season, scoringPeriod, eventId (digits only), espnS2?, swid? }` and returns `NflGameDetailDto`. It makes two calls, one after the other:
+  1. The public summary (`EspnNflSummary.cs`). A 400 or 404 from ESPN maps to 404, and anything unreadable to 502.
+  2. The league's `kona_player_info` for both teams: limit 60, sorted by percent owned, offensive positions plus K and D/ST.
+     - Players who didn't play or were ruled out are dropped (`IsMissedGame`).
+     - The rest are sorted by points once the game has started, and by projection before.
+     - `StatLine` uses `FormatSummary`.
+     - If this call fails, `FantasyPlayers` is null and the rest still loads.
+- **Last play:** the last play of `drives.current`, else of the last previous drive, else `situation.lastPlay`.
+- **Possession:** `situation.possession`, else the header competitor flagged `possession`.
+- **Down & distance:** `situation.downDistanceText`, else the current drive's last play.
+- **Team stats:** a whitelist in a fixed order, with "Red Zone (Made-Att)" shown as "Red Zone". Empty before kickoff.
+- **Box score:** passing, rushing, receiving and kicking, away team first. Empty before kickoff.
+
+## Frontend
+
+- **`utils/nfl-games.ts`:** `nflGamePhase`, `teamFieldState`, `playersInGame`, `stripFocusIndex`, `winner`, and `periodName` / `periodShort`. Tested in `nfl-games.spec.ts` (15 tests).
+- **`live-refresh.ts`:** `nextRefreshDelay` also takes NFL games and an interval.
+  - The matchup view passes the week's games, so a live game with no league starters still keeps the strip fresh.
+  - The game page uses `GAME_REFRESH_INTERVAL_MS` (30 s).
+- **`NflTeamMarkComponent`:** an NFL team drawn in its colours from `utils/pro-team-colors.ts`, with no logo. The primary colour is ringed in the secondary, so dark teams still show on a dark background. It's a dot on the strip, and a badge with the abbreviation in the game header. It's decorative, since the team's name or abbreviation always sits beside it.
+- **`NflGamesStripComponent`:**
+  - Opens centred on the current game, else the first live game, else the next to kick off. It only re-centres when that target changes, so refreshes don't move it.
+  - Status line: live dot and clock, kickoff time, or "Final" / "Final/OT".
+  - The winner is bold, the team with the ball is tinted, and there's a counts row and a "Bye" entry.
+  - Each card has a full `aria-label`.
+- **`NflGameService`:** a session cache per import, week and game. It keeps each fetch time, for timing live refreshes.
+- **`NflGameComponent`** (lazy, 26 kB):
+  - **Strip:** the week's strip, with the current game swapped for this page's fresher copy.
+  - **Back button:** an outlined pill like the roster page's "View Matchup", naming the matchup it returns to ("Back to GURU vs SCAR", or "Back to matchup" before the week loads or on a bye). Refresh sits opposite.
+  - **Header:** team badges, records, scores, clock, down & distance, and the possession tint.
+  - **Linescore,** then a Last play / Final / Kickoff card.
+  - **Top fantasy players:** the top 10, then "Show all".
+    - Projections go through `ProjectionsService`, so FantasyX mode applies.
+    - A non-rostered player gets ESPN's figure, since the model has no history for them.
+  - **Ownership dots:** every player rostered by either side of the viewed matchup gets a dot, in both the fantasy list and the box score.
+    - Colours: the theme's primary (emerald) for the side the matchup is viewed from, violet (`--p-violet-400`) for the opponent.
+    - Filled for a starter, a ring for the bench.
+    - A legend above both lists reads "Your players · Opponent's players · On the bench", or uses the two teams' names from someone else's matchup.
+    - Each dot's tooltip and accessible label say "Starting for …" or "On the bench for …".
+    - Players on neither side get an invisible dot, so names stay lined up.
+  - **Team stats, box score and scoring summary:** the box score has a `p-tabs` per team, with QBR, RTG and PCT hidden. The scoring summary is grouped by quarter.
+  - **Auto-refresh:** every 30 s while the game is live, paused while the tab is hidden. A failed auto-refresh keeps the data on screen.
+- **`.live-dot`** moved to `styles.css`, shared by the matchup cells, the strip and the game page.
+
+## Verification done
+
+- **Builds:**
+  - `dotnet build`: 0 warnings, 0 errors.
+  - `ng build` passes. The initial bundle is 1.56 MB, 59 kB over the warning budget (it was 41 kB over), because the strip and its utils load with the matchup view.
+  - Vitest: 125 tests.
+- **`POST /api/espn/nfl-game` against ESPN:**
+  - Final game 401872991: the score, linescores, record, broadcast, last play, 10 scoring plays, all 11 team stats and all four box score categories for both teams match ESPN's game page.
+  - Pregame game 401872994: kickoff and broadcast, with no plays, stats or box score.
+  - An unknown id answers 404, and a non-numeric id 400.
+  - With a league id that doesn't exist, `fantasyPlayers` is null and the rest of the game loads.
+- **UI against a mock API.** It served real ESPN week-5 data, mapped as the backend does, with DET @ ARI made live in the red zone.
+  - The strip opened centred on the live game, showing the red-zone tint, Final / Final/OT cards, the bye entry and counts per side.
+  - The live game page rendered every section, and the numbers matched ESPN's box score.
+  - The pregame page (BUF @ LAR) showed kickoff, broadcast and "players to watch" sorted by projection.
+  - `?team=2` carried through the strip links and Back. An unknown id showed the error with Retry.
+  - Auto-refresh paused while the page was hidden. On becoming visible, the overdue refresh fired at once, and the next came 31 s later.
+- **On the real league (week 5):**
+  - The strip showed all 15 games, the bye teams (CAR, KC) and both sides' counts, with no images loaded.
+  - On SF @ SEA, the fantasy points were the league's own (`appliedTotal`). George Kittle, starting for the user's team, got the green dot in both the fantasy list (12th) and the box score.
+  - The Back button read "Back to NRNP vs BSTB" and returned to `/matchup`.
+  - No horizontal overflow at 375px on the matchup view or the game page.
+- **Still to do:**
+  - The live spike above, then a real live window: check that the last play, clock and possession move on the strip and the game page.
+  - Spot-check two or three players' fantasy points against ESPN's own matchup page.
+
+## Development environment (2026-10-12)
+
+- The .NET 8 SDK (8.0.425) was installed with winget on the dev machine.
+- A stray Yarn PnP manifest in the home folder (`C:\Users\brboy\.pnp.cjs`, June 2024) made esbuild ignore `node_modules`. It was moved to the Recycle Bin.
+- `.claude/launch.json` defines `frontend` (`ng serve`, port 4200) and `backend` (`dotnet run --launch-profile http` from `backend/`, port 8080) for preview servers. It's gitignored as local tooling.
+- The backend needs `ConnectionStrings:FantasyX` in user-secrets to start.

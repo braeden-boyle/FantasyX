@@ -3,7 +3,7 @@ Custom fantasy football dashboard; import your team, get insights, news, and mor
 
 ## Status
 
-Import a team from ESPN (public or private league) and browse its roster, player game logs, the league standings and this week's head-to-head matchups. The matchup view shows each side's live win probability, the first insights feature. A settings switch changes every projection in the app between ESPN's and FantasyX's own (ESPN's adjusted by each player's track record against it this season), with a backtest of both. The league page has power rankings and playoff odds, and the Players page ranks every rostered and available player by rest-of-season value over replacement. Optional per-device credential persistence (see below); no accounts.
+Import a team from ESPN (public or private league) and browse its roster, player game logs, the league standings and this week's head-to-head matchups. The matchup view shows each side's live win probability, the first insights feature, and a ticker of the week's NFL games; each game opens a page with its last play, top fantasy players under the league's scoring, team stats and box score. A settings switch changes every projection in the app between ESPN's and FantasyX's own (ESPN's adjusted by each player's track record against it this season), with a backtest of both. The league page has power rankings and playoff odds, and the Players page ranks every rostered and available player by rest-of-season value over replacement. Optional per-device credential persistence (see below); no accounts.
 
 ## Structure
 
