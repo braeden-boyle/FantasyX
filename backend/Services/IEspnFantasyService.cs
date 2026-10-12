@@ -23,4 +23,6 @@ public interface IEspnFantasyService
         AvailablePlayersRequest request, CancellationToken cancellationToken);
 
     Task<DraftDto> GetDraftAsync(LeagueTeamsRequest request, CancellationToken cancellationToken);
+
+    Task<NflGameDetailDto> GetNflGameAsync(NflGameRequest request, CancellationToken cancellationToken);
 }

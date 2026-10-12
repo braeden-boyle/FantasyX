@@ -82,4 +82,11 @@ public class EspnFantasyController : ControllerBase
         var draft = await _espnFantasyService.GetDraftAsync(request, cancellationToken);
         return Ok(draft);
     }
+
+    [HttpPost("nfl-game")]
+    public async Task<ActionResult<NflGameDetailDto>> GetNflGame(NflGameRequest request, CancellationToken cancellationToken)
+    {
+        var game = await _espnFantasyService.GetNflGameAsync(request, cancellationToken);
+        return Ok(game);
+    }
 }
