@@ -16,7 +16,7 @@
 | v1.8 — Power rankings & playoff odds | #17 `17-add-team-power-rankings-and-playoff-odds` | Built |
 | v1.9 — Player rankings | #19 `19-add-player-rankings` | Built and checked against a mock league; live-league checks still to do |
 | v1.10 — Matchup UI improvements | #21 `21-matchup-ui-improvements` | Built and checked against a mock API; live-league checks still to do |
-| v1.11 — NFL scoreboard | No issue yet; `23-nfl-scoreboard` | Built; checked against ESPN, a mock API and the live league. Live-game checks still to do |
+| v1.11 — NFL scoreboard | #23 `23-nfl-scoreboard` | Built; checked against ESPN, a mock API and the live league. Live-game checks still to do |
 
 Sections below were first written as forward-looking plans. v1 and v1.1 are kept as the design record, with corrections where the build turned out differently.
 
@@ -793,7 +793,7 @@ No row is highlighted wherever `possession` is missing.
 
 ---
 
-# v1.11: NFL scoreboard (branch `23-nfl-scoreboard`, no issue yet)
+# v1.11: NFL scoreboard (issue #23) — on `23-nfl-scoreboard`
 
 ## Goal
 
