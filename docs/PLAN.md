@@ -1,6 +1,6 @@
 # FantasyX — Plan
 
-## Status (as of 2026-10-12)
+## Status (as of 2026-10-14)
 
 | Milestone | GitHub issue / branch | State |
 |---|---|---|
@@ -16,7 +16,9 @@
 | v1.8 — Power rankings & playoff odds | #17 `17-add-team-power-rankings-and-playoff-odds` | Built |
 | v1.9 — Player rankings | #19 `19-add-player-rankings` | Built and checked against a mock league; live-league checks still to do |
 | v1.10 — Matchup UI improvements | #21 `21-matchup-ui-improvements` | Built and checked against a mock API; live-league checks still to do |
-| v1.11 — NFL scoreboard | #23 `23-nfl-scoreboard` | Built; checked against ESPN, a mock API and the live league. Live-game checks still to do |
+| v1.11 — NFL scoreboard | #23 `23-nfl-scoreboard` (PR #24) | Merged; checked against ESPN, a mock API and the live league. Live-game checks still to do |
+| Roster suggestions (parent) | #25, sub-issues #26–#28 | Planning. Waivers (#27) and trades (#28) are blocked by #26 |
+| v1.12 — Start/sit assistant | #26 `26-add-start-sit-assistant` | Planned |
 
 Sections below were first written as forward-looking plans. v1 and v1.1 are kept as the design record, with corrections where the build turned out differently.
 
@@ -916,3 +918,124 @@ Show the real NFL games behind the matchup. The week's slate runs as a ticker on
 - A stray Yarn PnP manifest in the home folder (`C:\Users\brboy\.pnp.cjs`, June 2024) made esbuild ignore `node_modules`. It was moved to the Recycle Bin.
 - `.claude/launch.json` defines `frontend` (`ng serve`, port 4200) and `backend` (`dotnet run --launch-profile http` from `backend/`, port 8080) for preview servers. It's gitignored as local tooling.
 - The backend needs `ConnectionStrings:FantasyX` in user-secrets to start.
+
+---
+
+# Roster suggestions (issue #25)
+
+Advice that improves your team, in three parts, each a sub-issue with its own branch, PR and section here: the start/sit assistant (#26, v1.12), the waiver wire assistant (#27) and the trade analyzer (#28). Waivers and trades are blocked by start/sit, which builds the base the other two reuse.
+
+Shared decisions (2026-10-14):
+
+- **Home:** a new **Advice** tab (`/advice`), with one sub-tab per tool. Each tool fills in its tab when it ships.
+- **Lineup optimizer:** the best legal lineup a roster can field under the league's `LineupSlots`, solved exactly (see v1.12). Start/sit uses it on this week's projections. Waivers and trades use it inside roster value.
+- **Roster value** (rest of season): the sum, over every NFL week from this one through the last week of the fantasy playoffs, of the best lineup the roster (IR aside) can field that week. Byes, depth and positional need all count, so a fourth QB adds almost nothing. It's the same method and window as v1.8's per-week strength and v1.9's ROS. A change (a pickup, a drop, a trade) is valued as the roster's value after it minus before.
+- **Projections** follow the ESPN / FantasyX setting everywhere, with the "FantasyX projections" tag, as in v1.7.
+
+---
+
+# v1.12: Start/sit assistant (issue #26) — on `26-add-start-sit-assistant`
+
+## Goal
+
+Tell you who to start this week. Compare your set lineup with the best one your roster can field, list the changes that would gain points, show how close each call is, and show what the changes do to your chance of winning the matchup. It also builds the lineup optimizer and roster value that #27 and #28 reuse.
+
+## Decisions (asked 2026-10-14)
+
+- **Placement:** a new **Advice** tab after Players in the header nav (`pi pi-lightbulb`, icon-only on phones like the others).
+  - `/advice` redirects to `/advice/start-sit`. A `p-tabs` row shows **Start/Sit**, **Waivers** and **Trades**. The last two are disabled, marked "Soon", until #27 and #28 fill them.
+  - The route is lazy-loaded, like `/players`, to keep it out of the initial bundle (already 59 kB over the warning budget).
+  - **Your team only.** There's no `?team=` and no advice for other teams' rosters.
+  - **Roster hint:** your own roster view gets a one-line banner above Starters when there are suggested changes ("2 lineup changes suggested · +6.4 pts"), linking to `/advice/start-sit`. It's hidden when the lineup is already the best, while anything is loading, and on other teams' rosters.
+- **Objective: projected points.** The optimizer maximises the starters' projected total under the active source. It doesn't chase variance. Win probability is shown beside it, not optimised.
+- **Win probability, before → after:** the existing `winProbability` (v1.6), run on the set lineup and again on the suggested one, against this week's opponent ("Win chance 48% → 54%"). It's hidden on a bye week (no opponent), and when the matchup period spans more than one NFL week, as the matchup view's projections cover this week only.
+- **Close calls: chance to outscore.** Each change pairs a player in with a player out and shows the chance the one in outscores the one out:
+  - `P = Φ((μ_in − μ_out) / √(σ_in² + σ_out²))`, with `μ` the active projection and `σ` each player's `playerSpread` (v1.6: their misses against the active source, shrunk toward the position default).
+  - Under `TOSS_UP_PERCENT` (55) the change is labelled a **toss-up**. It's still suggested, since it still gains points.
+  - Filling an empty slot shows no chance.
+- **This week only:** advice is for the current scoring period, on this week's projections. Setting future weeks' lineups is out of scope.
+- **Locks:** a player is locked once their game kicks off (`gameTimeUtc` passed, or `gameState` in or post), as on ESPN. Locked starters stay where they are, and locked bench players can't come in. The page re-checks locks every minute against the clock, so a player locks at kickoff without a refetch. With everything locked, the page says there's nothing left to change.
+- **Who can start:** every rostered player not on IR and not locked. A player's eligibility is their position against each slot's `eligiblePositions`. Starters in slots the league's `LineupSlots` don't cover (IDP) are left exactly as they are.
+- **Ties keep your lineup.** A player already in a slot gets a tiny bonus (`KEEP_EPSILON`) there, so the optimizer never suggests a change that gains nothing.
+- **Warnings** (shown even when nothing better is available): a starter on bye, or projected at 0 (ruled out), with no eligible bench player to replace them. These name the slot, as a pointer toward waivers (#27).
+- **Context per player:** the lineup list shows each player's weekly position rank ("WR14 this week") from v1.9's This Week rankings (`PlayerRankingsService.rankingsFor('week')`). If those rankings fail, the column is left out and nothing else changes.
+- **Not done:** making lineup changes on ESPN (the app stays read-only), late-game hedging (starting a Monday player to keep options open), and risk-aware or ceiling/floor lineups.
+
+## Backend
+
+- **Slot names:** `EspnLookups.SlotName` gains the slots it doesn't name today, which show as `SLOT_n` on the roster: 1 `TQB`, 3 `RB/WR`, 5 `WR/TE`, 7 `OP`. Names come from the same table as `StartingSlot`, so a player's `Slot` always matches a `LineupSlot.Slot`. The frontend needs this to tell which slot each starter is in.
+- Nothing else. The week of matchups already carries every roster, lineup slot, projection, game time and game state, and the league carries `LineupSlots`.
+
+## Frontend
+
+- **`utils/lineup.ts`** (new, pure, the shared base):
+  - `LineupPlayer { playerId, position, projected, slot: string | null, locked: boolean }`.
+  - `optimalLineup(players, slots)`: the exact best assignment.
+    - Expand the slots into one entry per starter (`slotFillOrder`).
+    - Seat locked starters in their own slot entries.
+    - Solve the rest as a maximum-weight assignment (Hungarian / Kuhn–Munkres) of unlocked players to open slot entries. The weight is the projection when the position is eligible, plus `KEEP_EPSILON` for a player's current slot. Ineligible pairs are excluded.
+    - Returns each slot entry's player (or none), the bench, and the total.
+    - Exact because greedy-by-restrictiveness is only optimal when slots nest. It fails with `RB/WR` plus `WR/TE` slots, for example. A roster is under 20 players by about 10 slots, so the cost is negligible.
+  - `bestLineupTotal` moves here, as `optimalLineup(...).total` with no locks or current slots. `power-rankings.ts` re-exports it, so its callers don't change. Draft-day and per-week strengths get the exact answer too.
+  - `rosterValue(players, slots, weeks, projectionFor)`: the best lineup total for each week (IR left out) and their sum. `LeagueOutlookService.weeklyStrengths` uses it for weeks after this one, replacing its inline loop, so it's exercised from this PR on. Waivers and trades use it next.
+- **`utils/start-sit.ts`** (new, pure). Every tunable constant lives here.
+  - `isLocked(player, now)`
+  - `lineupChanges(current, optimal)`: players moving in and out, paired at the same position where possible, else by eligibility. An in-player with no partner fills an empty slot. Moves between starting slots aren't changes; they show in the lineup list.
+  - `chanceToOutscore(a, b)`, using `playerSpread` and `normalCdf` from `win-probability.ts`.
+  - `startSitAdvice(input)`: the current and best totals, the gain, the paired changes with their chance and toss-up flag, warnings, and each player's verdict: Start, Sit, Locked, Bye, Out or IR.
+- **`StartSitService`** (root): combines your team and opponent from `WeekMatchupsService`, `LineupSlots` from `LeagueOutlookService`, and `projectionOf` / `residualsOf` / status from `ProjectionsService`. It exposes `advice`, `status` and `refresh()`. Win chance before and after comes from `winProbability`, with your side's starter flags taken from the suggested lineup. The Advice page force-loads the week on each visit and on Refresh, since you may have just changed your lineup on ESPN. The roster hint reads the cached week.
+- **Components:**
+  - `AdviceComponent`: the lazy `/advice` shell, with the tab row and a child `router-outlet`.
+  - `StartSitComponent`, with three parts:
+    - A summary card: the gain, win chance before → after, and the projection-source tag.
+    - The suggested changes, each reading "Start A over B", with both players' avatars, slots, projections, the gain and the chance (or a toss-up tag), plus any warnings.
+    - The lineup slot by slot, suggested next to current, with verdict tags and weekly position ranks. Rows open the existing player drawer.
+  - A Refresh button, as on the matchup view. On phones, changes stack as cards, and the lineup list drops its rank column.
+  - The nav tab, and the roster hint in `TeamDisplayComponent`.
+- **Failure:**
+  - The week fails: the error and Retry, as on the matchup view.
+  - The league (slots) fails: the advice is unavailable, with Retry.
+  - FantasyX projections loading: skeletons. Unavailable: ESPN figures with the existing "FantasyX projections unavailable" note, never ESPN numbers under a FantasyX label.
+  - Residuals missing: position-default spreads, so chances still show.
+  - Weekly rankings fail: no rank column.
+
+## Verification
+
+1. **Vitest:**
+   - `optimalLineup`:
+     - It matches the greedy fill on a standard lineup.
+     - It beats greedy on an `RB/WR` + `WR/TE` counterexample.
+     - It fills `OP` in superflex.
+     - Locked starters stay put, and locked bench players never come in.
+     - IR is never started. Empty slots are filled when someone can play them.
+     - Ties keep the current lineup.
+   - `rosterValue`: it sums each week's best lineup, and a bye week drops that player for that week only.
+   - `lineupChanges`: one-for-one swaps pair at the same position, a chain (bench RB → RB, RB → FLEX) pairs sensibly, and an empty-slot fill has no partner.
+   - `chanceToOutscore`: 50% for identical players, symmetric, and rising with the projection gap.
+   - Toss-up threshold, verdicts, and warnings for a starter on bye with no backup.
+   - The existing power-rankings and player-rankings tests still pass.
+2. **Backend:** `dotnet build`. Check that a superflex (`OP`) or `RB/WR` league's roster shows proper slot names instead of `SLOT_n`.
+3. **UI against a mock API:** cover these cases:
+   - a bench player out-projecting a starter
+   - a starter on bye with a bench backup, and one without
+   - an Out starter
+   - a game in progress (locked players on both sides)
+   - an empty FLEX
+   - a multi-week playoff period (no win chance)
+   - a bye week (no opponent)
+
+   Then check:
+   - The roster hint appears and disappears with the lineup, and only on your team.
+   - Locks flip at kickoff without a refetch.
+   - Switching to FantasyX re-runs the advice, and the tag follows.
+   - The Waivers and Trades tabs are disabled.
+   - At 375px, all five nav tabs fit with no page overflow (narrow the icon tabs again if not).
+4. **Live league:**
+   - Before Sunday's games, the suggestions should agree with the gaps in ESPN's own projections in ESPN mode, and the win chance after should match the matchup view once the changes are made on ESPN and the page is refreshed.
+   - Power rankings and playoff odds should be unchanged on this league's standard lineup, since exact and greedy agree there.
+
+## Open questions
+
+- Whether a weekly position rank is worth its cost: it loads the available players on every Advice visit (cached per session).
+- Whether the toss-up threshold (55%) feels right once seen on real lineups.
+- Risk-aware lineups for heavy underdogs or favourites. They're deferred, and could come back as a "Play to win" switch using the same spreads.
