@@ -98,18 +98,19 @@ export class LeagueOutlookService {
   private cachedFor: ImportTeamRequest | null = null;
   private cached: Observable<League> | null = null;
 
+  // Carries the reload count, so every refresh is a new value: returning the same request object
+  // would read as unchanged, and a refresh or Retry would never refetch.
   private readonly leagueRequest = computed(() => {
     const request = this.teamState.importRequest();
     if (!request || !this.wanted()) return null;
-    this.reloads();
-    return request;
+    return { request, reload: this.reloads() };
   });
 
   private readonly leagueLoad = toSignal(
     toObservable(this.leagueRequest).pipe(
-      switchMap((request) =>
-        request
-          ? this.fetchLeague(request).pipe(
+      switchMap((leagueRequest) =>
+        leagueRequest
+          ? this.fetchLeague(leagueRequest.request).pipe(
               map((league): LeagueLoad => ({ league, error: null })),
               catchError((err) => of({ league: null, error: err?.error?.title ?? 'Could not load the league.' })),
               startWith(null),
