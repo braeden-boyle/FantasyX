@@ -12,6 +12,24 @@
   outline-offset: -2px;
 }
 
+/* The start/sit hint: a one-line link to the Advice page's suggested changes. */
+.lineup-hint {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.625rem 1rem;
+  border: 1px solid var(--p-primary-300);
+  border-radius: var(--p-content-border-radius);
+  background: color-mix(in srgb, var(--p-primary-500) 8%, transparent);
+  color: inherit;
+  text-decoration: none;
+}
+
+.lineup-hint:hover,
+.lineup-hint:focus-visible {
+  background: color-mix(in srgb, var(--p-primary-500) 14%, transparent);
+}
+
 /* The View Matchup link is styled as a button, so it drops the link underline and matches the
    league chip's height beside it. */
 .matchup-pill {

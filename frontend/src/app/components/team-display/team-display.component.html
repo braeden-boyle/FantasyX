@@ -110,6 +110,17 @@
       </div>
     </div>
 
+    @if (lineupHint(); as hint) {
+      <a routerLink="/advice/start-sit" class="lineup-hint">
+        <i class="pi pi-lightbulb"></i>
+        <span>
+          {{ hint.changes }} lineup {{ hint.changes === 1 ? 'change' : 'changes' }} suggested ·
+          <span class="font-medium">+{{ hint.gain | number: '1.1-1' }} pts</span>
+        </span>
+        <i class="pi pi-angle-right ml-auto"></i>
+      </a>
+    }
+
     <div>
       <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
         <h2 class="text-lg font-medium">Starters</h2>

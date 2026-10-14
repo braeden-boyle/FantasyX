@@ -27,17 +27,12 @@ public static class EspnLookups
         [30] = "JAX", [33] = "BAL", [34] = "HOU",
     };
 
-    private static readonly IReadOnlyDictionary<int, string> LineupSlots = new Dictionary<int, string>
+    // Names for the slots that aren't starting slots; starting slots take their name from
+    // StartingSlots, so a player's slot always matches the league's LineupSlots.
+    private static readonly IReadOnlyDictionary<int, string> OtherSlots = new Dictionary<int, string>
     {
-        [0] = "QB",
-        [2] = "RB",
-        [4] = "WR",
-        [6] = "TE",
-        [16] = "D/ST",
-        [17] = "K",
         [20] = "BE",
         [21] = "IR",
-        [23] = "FLEX",
     };
 
     private static readonly HashSet<int> BenchSlots = [20, 21];
@@ -80,7 +75,9 @@ public static class EspnLookups
         ProTeams.GetValueOrDefault(proTeamId, $"TEAM_{proTeamId}");
 
     public static string SlotName(int lineupSlotId) =>
-        LineupSlots.GetValueOrDefault(lineupSlotId, $"SLOT_{lineupSlotId}");
+        StartingSlots.TryGetValue(lineupSlotId, out var slot)
+            ? slot.Name
+            : OtherSlots.GetValueOrDefault(lineupSlotId, $"SLOT_{lineupSlotId}");
 
     public static bool IsStarterSlot(int lineupSlotId) => !BenchSlots.Contains(lineupSlotId);
 

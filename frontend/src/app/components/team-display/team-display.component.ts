@@ -18,6 +18,7 @@ import { TeamStateService } from '../../services/team-state.service';
 import { EspnApiService } from '../../services/espn-api.service';
 import { ProjectionsService } from '../../services/projections.service';
 import { LeagueOutlookService } from '../../services/league-outlook.service';
+import { StartSitService } from '../../services/start-sit.service';
 import { ImportTeamRequest, Player, Team } from '../../models/team.model';
 import { PlayerAvatarComponent } from '../player-avatar/player-avatar.component';
 import { PlayerDetailDrawerComponent } from '../player-detail-drawer/player-detail-drawer.component';
@@ -57,9 +58,11 @@ export class TeamDisplayComponent {
   private readonly espnApi = inject(EspnApiService);
   protected readonly projections = inject(ProjectionsService);
   private readonly outlook = inject(LeagueOutlookService);
+  private readonly startSit = inject(StartSitService);
 
   constructor() {
     this.outlook.ensureLoaded();
+    this.startSit.ensureLoaded();
   }
 
   // Bound from the /team/:teamId route param; absent on plain /team, which means the user's own team.
@@ -107,6 +110,9 @@ export class TeamDisplayComponent {
   protected retry(): void {
     this.reloadCount.update((n) => n + 1);
   }
+
+  // The start/sit hint over Starters: on your own team only, when there are changes to suggest.
+  protected readonly lineupHint = computed(() => (this.isOwnTeam() ? this.startSit.summary() : null));
 
   protected readonly starters = computed<Player[]>(() => sortStarters(this.team()?.players ?? []));
   protected readonly bench = computed<Player[]>(() => (this.team()?.players ?? []).filter((p) => !p.starter));

@@ -1,0 +1,246 @@
+@if (!teamState.importRequest()) {
+  <div class="max-w-xl mx-auto mt-10 p-4 text-center text-surface-500">
+    No team imported yet. <a routerLink="/import" class="text-primary-600 underline">Go import one</a>.
+  </div>
+} @else {
+  <div class="max-w-4xl mx-auto mt-6 p-4 flex flex-col gap-6">
+    <div class="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
+      <div class="flex flex-col gap-2">
+        <h1 class="text-2xl font-semibold whitespace-nowrap">
+          Start/Sit
+          @if (startSit.scoringPeriod(); as week) {
+            <span class="text-surface-500 font-normal">· Week {{ week }}</span>
+          }
+        </h1>
+        <app-projection-source />
+      </div>
+      <p-button
+        label="Refresh Lineup"
+        class="whitespace-nowrap"
+        icon="pi pi-refresh"
+        [text]="true"
+        size="small"
+        [loading]="startSit.refreshing()"
+        (onClick)="startSit.refresh()"
+      />
+    </div>
+
+    @switch (startSit.status()) {
+      @case ('error') {
+        <div class="flex flex-col items-start gap-3">
+          <p-message severity="error" [text]="startSit.error() ?? ''" class="w-full" />
+          <p-button label="Retry" icon="pi pi-refresh" size="small" (onClick)="startSit.retry()" />
+        </div>
+      }
+      @case ('unavailable') {
+        <div class="flex flex-col items-start gap-3">
+          <p-message
+            severity="warn"
+            text="Start/sit advice is unavailable: the league's lineup settings couldn't be loaded."
+            class="w-full"
+          />
+          <p-button label="Retry" icon="pi pi-refresh" size="small" (onClick)="startSit.retry()" />
+        </div>
+      }
+      @case ('ready') {
+        @if (advice(); as a) {
+          <!-- Summary: what the changes gain, and what they do to the matchup. -->
+          <section class="summary-card" aria-live="polite">
+            @if (a.allLocked) {
+              <p class="text-lg font-medium">Every game has kicked off, so there's nothing left to change.</p>
+            } @else if (a.changes.length) {
+              <p class="text-lg font-medium">
+                {{ a.changes.length }} {{ a.changes.length === 1 ? 'change' : 'changes' }} suggested
+                <span class="text-green-600 dark:text-green-400">+{{ a.gain | number: '1.1-1' }} pts</span>
+              </p>
+            } @else {
+              <p class="text-lg font-medium">Your lineup is already the best your roster can field.</p>
+            }
+            <div class="flex flex-wrap gap-x-6 gap-y-1 text-sm text-surface-600 dark:text-surface-300">
+              <span>
+                Projected
+                @if (a.changes.length) {
+                  <span class="tabular-nums">{{ a.currentTotal | number: '1.1-1' }}</span> →
+                }
+                <span class="tabular-nums font-medium">{{ a.bestTotal | number: '1.1-1' }}</span>
+              </span>
+              @if (winChange(); as w) {
+                <span>
+                  Win chance
+                  @if (a.changes.length) {
+                    <span class="tabular-nums">{{ chance(w.before) }}</span> →
+                  }
+                  <span class="tabular-nums font-medium">{{ chance(w.after) }}</span>
+                </span>
+              }
+            </div>
+          </section>
+
+          @for (w of a.warnings; track w.player.playerId) {
+            <p-message severity="warn" icon="pi pi-exclamation-triangle">
+              {{ w.player.player.fullName }} {{ warningReasons[w.reason] }}, and nobody on your bench can play
+              {{ w.slot }}.
+            </p-message>
+          }
+
+          @if (a.changes.length) {
+            <section class="flex flex-col gap-3">
+              <h2 class="text-lg font-medium">Suggested changes</h2>
+              @for (c of a.changes; track $index) {
+                <div class="change-card">
+                  <div class="change-players">
+                    @if (c.in) {
+                      <button type="button" class="change-player" (click)="openPlayer(c.in.player)">
+                        <span class="change-verb text-green-600 dark:text-green-400">Start</span>
+                        <app-player-avatar [player]="c.in.player" size="large" />
+                        <span class="flex flex-col min-w-0">
+                          <span class="font-medium truncate">{{ c.in.player.fullName }}</span>
+                          <span class="text-xs text-surface-500">
+                            {{ c.in.position }} · {{ c.in.player.proTeam }} · {{ c.inSlot }} · {{ c.in.projected | number: '1.1-1' }}
+                          </span>
+                        </span>
+                      </button>
+                    }
+                    @if (c.out) {
+                      <button type="button" class="change-player" (click)="openPlayer(c.out.player)">
+                        <span class="change-verb text-surface-500 font-normal">{{ c.in ? 'over' : 'Bench' }}</span>
+                        <app-player-avatar [player]="c.out.player" size="large" />
+                        <span class="flex flex-col min-w-0">
+                          <span class="font-medium truncate">{{ c.out.player.fullName }}</span>
+                          <span class="text-xs text-surface-500">
+                            {{ c.out.position }} · {{ c.out.player.proTeam }} · {{ c.outSlot }} · {{ c.out.projected | number: '1.1-1' }}
+                          </span>
+                        </span>
+                      </button>
+                    } @else {
+                      <span class="text-sm text-surface-500">in the empty {{ c.inSlot }} slot</span>
+                    }
+                  </div>
+                  <div class="change-figures">
+                    <span class="font-medium tabular-nums text-green-600 dark:text-green-400">
+                      +{{ c.gain | number: '1.1-1' }}
+                    </span>
+                    @if (c.chance !== null) {
+                      @if (c.tossUp) {
+                        <p-tag
+                          value="Toss-up"
+                          severity="warn"
+                          [pTooltip]="'Outscores them ' + percent(c.chance) + ' of the time: under ' + tossUpPercent + '%.'"
+                          [attr.aria-label]="'Toss-up: outscores them ' + percent(c.chance) + ' of the time'"
+                        />
+                      } @else {
+                        <span
+                          class="text-xs text-surface-500 tabular-nums"
+                          [pTooltip]="'The chance ' + c.in!.player.fullName + ' outscores ' + c.out!.player.fullName + '.'"
+                        >
+                          {{ percent(c.chance) }} to outscore
+                        </span>
+                      }
+                    }
+                  </div>
+                </div>
+              }
+            </section>
+          }
+
+          <section class="flex flex-col gap-2">
+            <h2 class="text-lg font-medium">Suggested lineup</h2>
+            <ng-container *ngTemplateOutlet="lineupTable; context: { $implicit: starterRows() }" />
+            <h2 class="text-lg font-medium mt-4">Bench</h2>
+            <ng-container *ngTemplateOutlet="lineupTable; context: { $implicit: benchRows() }" />
+          </section>
+        }
+      }
+      @default {
+        <div class="flex justify-center mt-10">
+          <p-progress-spinner ariaLabel="Loading start/sit advice" />
+        </div>
+      }
+    }
+  </div>
+
+  <ng-template #lineupTable let-rows>
+    <p-table [value]="rows" styleClass="p-datatable-sm">
+      <ng-template pTemplate="header">
+        <tr>
+          <th>Slot</th>
+          <th>Player</th>
+          <th>Opponent</th>
+          @if (startSit.ranksShown()) {
+            <th class="rank-column" pTooltip="Position rank on this week's projections, across the league and its free agents.">
+              Rank
+            </th>
+          }
+          <th class="!text-right">Proj</th>
+          <th></th>
+        </tr>
+      </ng-template>
+      <ng-template pTemplate="body" let-row>
+        @if (row.player; as p) {
+          <tr
+            class="cursor-pointer player-row"
+            [class.changed-row]="row.changed"
+            tabindex="0"
+            [attr.aria-label]="'Show details for ' + p.player.fullName"
+            (click)="openPlayer(p.player)"
+            (keydown.enter)="openPlayer(p.player)"
+            (keydown.space)="$event.preventDefault(); openPlayer(p.player)"
+          >
+            <td>{{ row.slot }}</td>
+            <td>
+              <div class="flex items-center gap-2">
+                <app-player-avatar [player]="p.player" size="large" />
+                <div class="flex flex-col">
+                  <span>{{ p.player.fullName }}</span>
+                  <span class="text-xs text-surface-500">
+                    {{ p.position }} · {{ p.player.proTeam }}
+                    @if (p.player.injuryStatus && p.player.injuryStatus !== 'ACTIVE') {
+                      <p-tag
+                        [severity]="statusSeverity(p.player.injuryStatus)"
+                        [value]="p.player.injuryStatus"
+                        styleClass="!text-xs ml-1"
+                      />
+                    }
+                  </span>
+                </div>
+              </div>
+            </td>
+            <td>
+              @if (p.player.opponent) {
+                <div class="flex flex-col">
+                  <span>{{ p.player.opponentIsHome ? 'vs' : '@' }} {{ p.player.opponent }}</span>
+                  <span class="text-xs text-surface-500">{{ formatGameTime(p.player.gameTimeUtc) }}</span>
+                </div>
+              } @else {
+                <span class="text-surface-500">BYE</span>
+              }
+            </td>
+            @if (startSit.ranksShown()) {
+              <td class="rank-column tabular-nums">{{ startSit.weekRankOf(p.playerId) ?? '—' }}</td>
+            }
+            <td class="!text-right tabular-nums">{{ p.projected | number: '1.1-1' }}</td>
+            <td>
+              @if (verdictOf(p); as v) {
+                <p-tag [value]="v" [severity]="verdictSeverity(v)" [icon]="v === 'Locked' ? 'pi pi-lock' : ''" />
+              }
+            </td>
+          </tr>
+        } @else {
+          <tr>
+            <td>{{ row.slot }}</td>
+            <td [attr.colspan]="startSit.ranksShown() ? 5 : 4" class="text-surface-500">Empty</td>
+          </tr>
+        }
+      </ng-template>
+    </p-table>
+  </ng-template>
+
+  <app-player-detail-drawer
+    [player]="selectedPlayer()"
+    [hasPrevious]="hasPreviousPlayer()"
+    [hasNext]="hasNextPlayer()"
+    (previous)="stepPlayer(-1)"
+    (next)="stepPlayer(1)"
+    (closed)="closePlayer()"
+  />
+}
