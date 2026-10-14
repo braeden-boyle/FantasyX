@@ -18,7 +18,7 @@
 | v1.10 — Matchup UI improvements | #21 `21-matchup-ui-improvements` | Built and checked against a mock API; live-league checks still to do |
 | v1.11 — NFL scoreboard | #23 `23-nfl-scoreboard` (PR #24) | Merged; checked against ESPN, a mock API and the live league. Live-game checks still to do |
 | Roster suggestions (parent) | #25, sub-issues #26–#28 | Planning. Waivers (#27) and trades (#28) are blocked by #26 |
-| v1.12 — Start/sit assistant | #26 `26-add-start-sit-assistant` | Planned |
+| v1.12 — Start/sit assistant | #26 `26-add-start-sit-assistant` | Built and checked against a mock API; live-league checks still to do |
 
 Sections below were first written as forward-looking plans. v1 and v1.1 are kept as the design record, with corrections where the build turned out differently.
 
@@ -1033,6 +1033,51 @@ Tell you who to start this week. Compare your set lineup with the best one your 
 4. **Live league:**
    - Before Sunday's games, the suggestions should agree with the gaps in ESPN's own projections in ESPN mode, and the win chance after should match the matchup view once the changes are made on ESPN and the page is refreshed.
    - Power rankings and playoff odds should be unchanged on this league's standard lineup, since exact and greedy agree there.
+
+## As built
+
+- **Shared base:**
+  - `utils/lineup.ts` holds `slotFillOrder`, `optimalLineup`, `bestLineupTotal` and `rosterValue`. `power-rankings.ts` re-exports the first two and `LineupCandidate`.
+  - A player projected at 0 or below only starts if they're already in that slot. So a bye isn't swapped for another bye, and a starter on bye with no backup stays put and gets a warning.
+- **Start/sit logic:**
+  - `utils/start-sit.ts` also has `currentLineup`, the set lineup in the optimizer's shape.
+  - Verdicts check in this order: IR, Locked, Bye, Out, then Start or Sit. A starter in a slot the settings don't cover (IDP) reads Start.
+  - Warnings skip locked players.
+- **Service:** `StartSitService` runs a one-minute clock for locks once anything asks for advice. Its `retry()` refetches the league when the lineup settings failed, and the week either way.
+- **Page:**
+  - Each change reads "Start A over B", with "over" in the second player's verb column so the names line up when they stack on phones. A player benched with no one coming in reads "Bench B".
+  - The lineup list shows the suggested starters, then the bench and IR. Players moving in or out get a primary-coloured edge on their row.
+  - The Advice sub-tab row is scrollable. On phones the "Soon" tags are dropped, and the header's icon tabs narrow to 0.625rem padding so all five fit.
+- **Fixed on the way:** `LeagueOutlookService.refresh()` never refetched. Its request signal returned the same object, so the reload count was read but nothing downstream saw a change. The League page's Retry and its refetch on every visit were both affected. The request now carries the reload count.
+
+## Verification done
+
+- **Builds:**
+  - `dotnet build`: 0 warnings, 0 errors.
+  - `ng build` passes. The initial bundle is 1.57 MB, 70 kB over the warning budget (it was 59 kB over), because the roster hint brings the start/sit logic into it. `/advice` is a separate 17.5 kB chunk.
+  - Vitest: 154 tests, 29 of them new (12 in `lineup.spec.ts`, 17 in `start-sit.spec.ts`). The existing power-rankings and player-rankings tests pass unchanged.
+- **UI against a mock API** (the production build served with a hand-built week 7 roster):
+  - **Main case:** 3 changes for +15.6 pts.
+    - A bench RB replaces a weaker RB, 67% to outscore.
+    - A bench WR replaces an RB in FLEX, paired by slot.
+    - A bench TE replaces a starter on bye.
+    - An Out kicker with no backup gets a warning.
+    - A live WR starter and a live WR on the bench (projected 20) both read Locked and are never moved.
+    - Win chance goes from 17.2% to 35.5%.
+  - **Roster hint:** shows "3 lineup changes suggested · +15.6 pts" on your team only. It's gone once the lineup is the best.
+  - **Edge cases:**
+    - A bye week and a multi-week round hide the win chance.
+    - A failed week shows the error with Retry.
+    - A failed league shows "unavailable" with Retry, and Retry recovers.
+    - The League page's Retry now recovers too.
+    - FantasyX mode shows the tag.
+  - **Phone width:** no page overflow at 375px on the Advice page or the roster page.
+- **Not checked yet:**
+  - A lock flipping at kickoff while the page is open. Only the unit tests cover it.
+  - Weekly position ranks with real data. The mock has no history, so its ranks were meaningless.
+  - Real headshots.
+  - Everything in step 4 (live league).
+  - Step 2's check that an `OP` or `RB/WR` league shows real slot names.
 
 ## Open questions
 
