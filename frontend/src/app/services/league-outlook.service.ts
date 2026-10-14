@@ -19,6 +19,7 @@ import {
   teamStrength,
 } from '../utils/power-rankings';
 import { OddsInput, PlayoffOdds, TeamOdds, playoffOdds, weeklySpread } from '../utils/playoff-odds';
+import { rosterValue } from '../utils/lineup';
 
 interface LeagueLoad {
   league: League | null;
@@ -292,18 +293,16 @@ export class LeagueOutlookService {
     const scores = completedScores(league.schedule, this.completedBefore());
     const projectionOf = this.projections.projectionOf();
 
+    const laterWeeks = Array.from({ length: lastWeek - scoringPeriod }, (_, i) => scoringPeriod + 1 + i);
+
     const strengths = new Map<number, Map<number, number>>();
     for (const { team } of week.week.teams) {
+      const later = slots.length ? rosterValue(team.players, slots, laterWeeks, future).byWeek : null;
       const byWeek = new Map<number, number>();
       for (let s = scoringPeriod; s <= lastWeek; s++) {
         const roster =
           s === scoringPeriod ? rosterStrength(team.players, projectionOf)
-          : slots.length ? bestLineupTotal(
-              team.players
-                .filter((p) => p.slot !== 'IR')
-                .map((p) => ({ playerId: p.playerId, position: p.position, projected: future(p, s) })),
-              slots,
-            )
+          : later ? later.get(s)!
           : rosterStrength(team.players, (p) => future(p, s));
         const parts = teamStrength(scores.get(team.teamId) ?? [], roster);
         if (parts) byWeek.set(s, parts.strength);

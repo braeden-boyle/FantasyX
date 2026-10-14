@@ -1,4 +1,4 @@
-import { LineupSlot, Player, ScheduledMatchup } from '../models/team.model';
+import { Player, ScheduledMatchup } from '../models/team.model';
 
 // Power rankings order teams by one strength figure, an expected weekly score, that blends how a
 // team has scored with what its roster is projected to score now:
@@ -36,34 +36,10 @@ export function rosterStrength(players: readonly Player[], projectionOf: Strengt
     }, 0);
 }
 
-export interface LineupCandidate {
-  playerId: number;
-  position: string;
-  projected: number;
-}
-
-// A lineup's slots in the order they're filled, one entry per starter: the most restrictive (fewest
-// eligible positions) first, so a FLEX takes whoever is left over once RB, WR and TE are set. Shared
-// with player rankings' league-wide starter count.
-export function slotFillOrder(slots: readonly LineupSlot[]): LineupSlot[] {
-  return [...slots]
-    .sort((a, b) => a.eligiblePositions.length - b.eligiblePositions.length)
-    .flatMap((slot) => Array.from({ length: slot.count }, () => slot));
-}
-
-// The projected total of the best starting lineup a set of players can field: each slot, in fill
-// order, takes the best player left who can play it. Used for draft day, when there's no set lineup
-// to go on, and for later weeks, when lineups get reset.
-export function bestLineupTotal(players: readonly LineupCandidate[], slots: readonly LineupSlot[]): number {
-  const available = [...players].filter((p) => p.projected > 0).sort((a, b) => b.projected - a.projected);
-  const used = new Set<number>();
-  return slotFillOrder(slots).reduce((sum, slot) => {
-    const pick = available.find((p) => !used.has(p.playerId) && slot.eligiblePositions.includes(p.position));
-    if (!pick) return sum;
-    used.add(pick.playerId);
-    return sum + pick.projected;
-  }, 0);
-}
+// The best-lineup total behind draft day and later weeks' strengths now lives with the lineup
+// optimizer.
+export { bestLineupTotal, slotFillOrder } from './lineup';
+export type { LineupCandidate } from './lineup';
 
 // Each team's score in every regular-season matchup before beforePeriod, in period order. Byes
 // (no opponent) aren't scores.
