@@ -30,6 +30,7 @@ export class App {
     { route: '/matchup', label: 'Matchup', icon: 'pi pi-bolt' },
     { route: '/league', label: 'League', icon: 'pi pi-trophy' },
     { route: '/players', label: 'Players', icon: 'pi pi-users' },
+    { route: '/advice', label: 'Advice', icon: 'pi pi-lightbulb' },
   ];
 
   private readonly url = toSignal(
@@ -41,13 +42,16 @@ export class App {
   );
 
   // No tab is active while viewing another team or its matchup (/team/:teamId, /matchup/:teamId) or the import page.
-  // The power rankings page (/league/rankings) belongs to League, and NFL game pages (/matchup/game/:id) to Matchup.
+  // The power rankings page (/league/rankings) belongs to League, NFL game pages (/matchup/game/:id) to Matchup,
+  // and each advice tool (/advice/start-sit) to Advice.
   protected readonly activeTab = computed(() => {
     const url = this.url().startsWith('/league/')
       ? '/league'
       : this.url().startsWith('/matchup/game/')
         ? '/matchup'
-        : this.url();
+        : this.url().startsWith('/advice/')
+          ? '/advice'
+          : this.url();
     return this.tabs.find((t) => t.route === url)?.route ?? '';
   });
 

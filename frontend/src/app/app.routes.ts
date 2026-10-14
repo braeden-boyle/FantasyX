@@ -30,4 +30,10 @@ export const routes: Routes = [
     loadComponent: () =>
       import('./components/player-rankings/player-rankings.component').then((m) => m.PlayerRankingsComponent),
   },
+  // Roster advice: start/sit now, waivers and trades later, each a child route. Loaded on first
+  // visit, like /players.
+  {
+    path: 'advice',
+    loadChildren: () => import('./components/advice/advice.routes').then((m) => m.ADVICE_ROUTES),
+  },
 ];
