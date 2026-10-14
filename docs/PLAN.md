@@ -18,7 +18,7 @@
 | v1.10 — Matchup UI improvements | #21 `21-matchup-ui-improvements` | Built and checked against a mock API; live-league checks still to do |
 | v1.11 — NFL scoreboard | #23 `23-nfl-scoreboard` (PR #24) | Merged; checked against ESPN, a mock API and the live league. Live-game checks still to do |
 | Roster suggestions (parent) | #25, sub-issues #26–#28 | Planning. Waivers (#27) and trades (#28) are blocked by #26 |
-| v1.12 — Start/sit assistant | #26 `26-add-start-sit-assistant` | Built and checked against a mock API; live-league checks still to do |
+| v1.12 — Start/sit assistant | #26 `26-add-start-sit-assistant` (PR #29) | Built; checked against a mock API and the live league |
 
 Sections below were first written as forward-looking plans. v1 and v1.1 are kept as the design record, with corrections where the build turned out differently.
 
@@ -1072,12 +1072,10 @@ Tell you who to start this week. Compare your set lineup with the best one your 
     - The League page's Retry now recovers too.
     - FantasyX mode shows the tag.
   - **Phone width:** no page overflow at 375px on the Advice page or the roster page.
+- **Live league (2026-10-14):** checked and verified by the user on their real league, covering step 4. This also showed the advice with real weekly position ranks and headshots, which the mock couldn't.
 - **Not checked yet:**
   - A lock flipping at kickoff while the page is open. Only the unit tests cover it.
-  - Weekly position ranks with real data. The mock has no history, so its ranks were meaningless.
-  - Real headshots.
-  - Everything in step 4 (live league).
-  - Step 2's check that an `OP` or `RB/WR` league shows real slot names.
+  - Step 2's check that an `OP` or `RB/WR` league shows real slot names. That needs a league with those slots.
 
 ## Open questions
 
