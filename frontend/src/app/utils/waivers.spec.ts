@@ -10,6 +10,7 @@ import {
   droppable,
   forPosition,
   mightHelp,
+  rankSuggestions,
   proTeamLocked,
   waiverAdvice,
   weakestStarters,
@@ -254,6 +255,38 @@ describe('the drop search', () => {
       }
     }
     expect(checked).toBeGreaterThan(80);
+  });
+});
+
+describe('rankSuggestions', () => {
+  // Rest-of-season and this week's gains for four pickups; 3 and 4 tie on both.
+  const suggestions = [
+    { player: available(1, 'WR', [1]), gain: 20, weekGain: 0 },
+    { player: available(2, 'WR', [1]), gain: 8, weekGain: 6 },
+    { player: available(4, 'WR', [1]), gain: 12, weekGain: 3 },
+    { player: available(3, 'WR', [1]), gain: 12, weekGain: 3 },
+  ];
+  const order = (horizon: 'restOfSeason' | 'week') => rankSuggestions(suggestions, horizon).map((s) => s.player.playerId);
+
+  it('ranks by rest-of-season gain, then this week, then player id', () => {
+    expect(order('restOfSeason')).toEqual([1, 3, 4, 2]);
+  });
+
+  it("ranks by this week's gain, then rest of season, then player id", () => {
+    expect(order('week')).toEqual([2, 3, 4, 1]);
+  });
+
+  it('treats a gain too small to show as a tie, so the other gain decides', () => {
+    const tiny = [
+      { player: available(1, 'D/ST', [1]), gain: 20.9, weekGain: 0.047 },
+      { player: available(2, 'D/ST', [1]), gain: 26.1, weekGain: 0 },
+    ];
+    expect(rankSuggestions(tiny, 'week').map((s) => s.player.playerId)).toEqual([2, 1]);
+  });
+
+  it('leaves the list it was given alone', () => {
+    rankSuggestions(suggestions, 'week');
+    expect(suggestions.map((s) => s.player.playerId)).toEqual([1, 2, 4, 3]);
   });
 });
 

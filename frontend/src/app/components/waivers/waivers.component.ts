@@ -13,12 +13,16 @@ import { TeamStateService } from '../../services/team-state.service';
 import { WaiversService } from '../../services/waivers.service';
 import { ordinal } from '../../utils/league-format';
 import { statusSeverity } from '../../utils/player-format';
-import { MIN_GAIN, forPosition } from '../../utils/waivers';
+import { RankingHorizon } from '../../utils/player-rankings';
+import { MIN_GAIN, forPosition, rankSuggestions } from '../../utils/waivers';
 import { PlayerAvatarComponent } from '../player-avatar/player-avatar.component';
 import { DrawerPlayer, PlayerDetailDrawerComponent } from '../player-detail-drawer/player-detail-drawer.component';
 import { ProjectionSourceComponent } from '../projection-source/projection-source.component';
 
 const ALL = 'ALL';
+
+// The smallest this-week gain shown as a number; anything closer to 0 rounds to "+0.0".
+const WEEK_GAIN_SHOWN = 0.05;
 
 // The Waivers tab: free agents and waiver players worth claiming, and who to drop for each.
 @Component({
@@ -63,10 +67,31 @@ export class WaiversComponent {
     ...(this.waivers.rankings()?.positions ?? []).map((p) => ({ label: p, value: p })),
   ]);
 
+  protected readonly horizonOptions: { label: string; value: RankingHorizon }[] = [
+    { label: 'Rest of Season', value: 'restOfSeason' },
+    { label: 'This Week', value: 'week' },
+  ];
+
   protected readonly suggestions = computed(() => {
     const position = this.position();
-    return forPosition(this.advice()?.suggestions ?? [], position === ALL ? null : position);
+    const ranked = rankSuggestions(this.advice()?.suggestions ?? [], this.waivers.horizon());
+    return forPosition(ranked, position === ALL ? null : position);
   });
+
+  // How many pickups gain anything this week, for the summary when ranking by this week.
+  protected readonly helpThisWeek = computed(
+    () => (this.advice()?.suggestions ?? []).filter((s) => s.weekGain >= WEEK_GAIN_SHOWN).length,
+  );
+
+  protected setHorizon(horizon: RankingHorizon | null): void {
+    if (horizon) this.waivers.horizon.set(horizon);
+  }
+
+  // A gain with its sign, to one decimal ("+3.1", "-0.8"), or null when it rounds to nothing.
+  protected signedGain(gain: number): string | null {
+    if (Math.abs(gain) < WEEK_GAIN_SHOWN) return null;
+    return `${gain > 0 ? '+' : '-'}${Math.abs(gain).toFixed(1)}`;
+  }
 
   // The rankings' window, for "Starts 8 of 11 weeks".
   protected readonly windowWeeks = computed(() => {

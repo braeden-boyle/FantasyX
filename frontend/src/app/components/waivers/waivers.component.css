@@ -86,6 +86,11 @@
   margin-left: auto;
 }
 
+/* The gain pickups are ranked by. */
+.figure-primary {
+  font-weight: 500;
+}
+
 .pickup-alternative {
   flex-basis: 100%;
 }

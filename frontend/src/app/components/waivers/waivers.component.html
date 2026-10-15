@@ -58,6 +58,9 @@
             @if (a.suggestions.length) {
               <p class="text-lg font-medium">
                 {{ a.suggestions.length }} {{ a.suggestions.length === 1 ? 'pickup' : 'pickups' }} would improve your roster
+                @if (waivers.horizon() === 'week') {
+                  <span class="text-surface-500 font-normal">· {{ helpThisWeek() }} this week</span>
+                }
               </p>
             } @else {
               <p class="text-lg font-medium">Nobody available beats your roster.</p>
@@ -91,6 +94,19 @@
           </section>
 
           <div class="flex flex-col gap-3">
+            <div class="flex flex-wrap items-center gap-3">
+              <p-selectbutton
+                [options]="horizonOptions"
+                [ngModel]="waivers.horizon()"
+                (ngModelChange)="setHorizon($event)"
+                [allowEmpty]="false"
+                optionLabel="label"
+                optionValue="value"
+                ariaLabelledBy="waiver-horizon"
+                size="small"
+              />
+              <span id="waiver-horizon" class="sr-only">Rank pickups by</span>
+            </div>
             <div class="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
               <!-- Scrolls sideways rather than wrapping if a league's positions don't fit on a phone. -->
               <div class="filter-scroll">
@@ -174,22 +190,15 @@
                     <span class="text-sm text-surface-500">No drop needed</span>
                   }
                 </div>
+                <!-- The gain pickups are ranked by comes first and stands out; the other sits under it. -->
                 <div class="pickup-figures">
-                  <span
-                    class="font-medium tabular-nums text-green-600 dark:text-green-400"
-                    pTooltip="Projected points your best lineup gains over the rest of the season."
-                  >
-                    +{{ s.gain | number: '1.1-1' }} ROS
-                  </span>
-                  <span class="text-xs text-surface-500 tabular-nums">
-                    @if (s.weekGain >= 0.05) {
-                      +{{ s.weekGain | number: '1.1-1' }} this week
-                    } @else if (s.weekGain <= -0.05) {
-                      {{ s.weekGain | number: '1.1-1' }} this week
-                    } @else {
-                      Nothing this week
-                    }
-                  </span>
+                  @if (waivers.horizon() === 'week') {
+                    <ng-container *ngTemplateOutlet="weekFigure; context: { $implicit: s, primary: true }" />
+                    <ng-container *ngTemplateOutlet="rosFigure; context: { $implicit: s, primary: false }" />
+                  } @else {
+                    <ng-container *ngTemplateOutlet="rosFigure; context: { $implicit: s, primary: true }" />
+                    <ng-container *ngTemplateOutlet="weekFigure; context: { $implicit: s, primary: false }" />
+                  }
                   <span class="text-xs text-surface-500 tabular-nums">Starts {{ s.startsIn }} of {{ windowWeeks() }} weeks</span>
                 </div>
                 @if (s.alternative; as alt) {
@@ -225,6 +234,35 @@
       }
     }
   </div>
+
+  <ng-template #rosFigure let-s let-primary="primary">
+    <span
+      class="tabular-nums"
+      [ngClass]="primary ? 'figure-primary text-green-600 dark:text-green-400' : 'text-xs text-surface-500'"
+      pTooltip="Projected points your best lineup gains over the rest of the season."
+    >
+      +{{ s.gain | number: '1.1-1' }} ROS
+    </span>
+  </ng-template>
+
+  <ng-template #weekFigure let-s let-primary="primary">
+    @let gain = signedGain(s.weekGain);
+    <span
+      class="tabular-nums"
+      [ngClass]="
+        !primary ? 'text-xs text-surface-500'
+        : s.weekGain > 0 && gain ? 'figure-primary text-green-600 dark:text-green-400'
+        : 'figure-primary text-surface-500'
+      "
+      pTooltip="Projected points your best lineup gains this week."
+    >
+      @if (gain) {
+        {{ gain }} this week
+      } @else {
+        Nothing this week
+      }
+    </span>
+  </ng-template>
 
   <app-player-detail-drawer
     [player]="selectedPlayer()"

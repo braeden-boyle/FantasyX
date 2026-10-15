@@ -1,5 +1,6 @@
 import { LineupSlot, NflGame, Player } from '../models/team.model';
 import { RosterValue, optimalLineup } from './lineup';
+import { RankingHorizon } from './player-rankings';
 
 // Waiver advice for one roster: the free agents and waiver players worth claiming, each with the drop
 // that leaves the roster strongest. A move is valued as the roster's value (utils/lineup.ts) after it
@@ -263,6 +264,21 @@ function dropResult<R extends WaiverPlayer>(
 }
 
 const sum = (values: readonly number[]) => values.reduce((total, v) => total + v, 0);
+
+// The suggestions in the order a ranking wants: by rest-of-season gain, or by this week's. The
+// ranking gain is compared as shown, to one decimal, so a gain too small to show (+0.04 reads as
+// nothing) doesn't outrank 0; the other gain breaks ties, then player id. Only the order changes:
+// the pickups and their drops are the same, since a drop is for good.
+export function rankSuggestions<S extends { player: WaiverPlayer; gain: number; weekGain: number }>(
+  suggestions: readonly S[],
+  horizon: RankingHorizon,
+): S[] {
+  const [first, second] = horizon === 'week' ? (['weekGain', 'gain'] as const) : (['gain', 'weekGain'] as const);
+  const shown = (gain: number) => Math.round(gain * 10);
+  return [...suggestions].sort(
+    (a, b) => shown(b[first]) - shown(a[first]) || b[second] - a[second] || a.player.playerId - b.player.playerId,
+  );
+}
 
 // The suggestions to show: all of them, or one position's, cut to MAX_SUGGESTIONS.
 export function forPosition<S extends { player: WaiverPlayer }>(suggestions: readonly S[], position: string | null): S[] {

@@ -1233,6 +1233,12 @@ Tell you which free agents and waiver players are worth claiming, and who to dro
   - It's hidden with an open roster spot, where nobody is dropped.
   - `WaiversService.samePosition` keeps it for the session.
   - On the live league it turns 105 pickups into 62. The D/STs now drop the Saints D/ST rather than the injured WR, and the QBs drop the backup QB.
+- **Rank by** (added 2026-10-15, at the user's request): a **Rest of Season / This Week** switch above the chips, with the Players page's labels.
+  - It only changes the order (`rankSuggestions`). The pickups and their drops stay the same, since a drop is for good and is still judged over the rest of the season.
+  - The ranking gain is compared as shown, to one decimal, so a week gain too small to show (+0.04, "Nothing this week") doesn't outrank 0. The other gain breaks ties.
+  - Each card's ranking gain comes first, in the primary green, and the other moves to the small line under it. A week gain that rounds to nothing reads "Nothing this week" in grey.
+  - In This Week mode the summary adds how many pickups gain anything this week ("· 4 this week" on the live league, all D/STs).
+  - `WaiversService.horizon` keeps it for the session.
 - **`WaiversService`:**
   - Reuses `StartSitService`'s week, which the page force-loads on each visit, its one-minute lock clock (now exposed as `now`) and the week's `nflGames`.
   - The locked sets are computed once per tick and compare equal when nothing flipped, so the advice only reruns when a lock changes, not every minute.
@@ -1249,7 +1255,7 @@ Tell you which free agents and waiver players are worth claiming, and who to dro
 - **Builds:**
   - `dotnet build`: 0 warnings, 0 errors.
   - `ng build` passes. The initial bundle is unchanged (1.57 MB, 70 kB over the warning budget, as on `main`). The `/advice` chunk grows from 17.5 kB to 36.2 kB.
-  - Vitest: 174 tests, 20 of them new in `waivers.spec.ts`. Two compare against brute force on random rosters: the prefilter never skips a pickup that would gain (200 rosters with an open spot), and the bounded drop search finds the same best and next-best gains as trying every drop (150 full rosters, half of them with same-position drops).
+  - Vitest: 178 tests, 24 of them new in `waivers.spec.ts`. Two compare against brute force on random rosters: the prefilter never skips a pickup that would gain (200 rosters with an open spot), and the bounded drop search finds the same best and next-best gains as trying every drop (150 full rosters, half of them with same-position drops).
 - **On the live league (week 6), with a backend built from this branch:**
   - 260 available players. The prefilter kept 150, and 105 gain at least 0.5 pts over weeks 6–17.
   - The top pickups are D/STs, each dropping an injured WR projected at 0 (or the backup QB, for the same gain). The WRs and kickers further down are bye-week fill-ins ("Starts 1 of 12 weeks").

@@ -5,7 +5,7 @@ import { ProjectionsService } from './projections.service';
 import { StartSitService } from './start-sit.service';
 import { TeamStateService } from './team-state.service';
 import { Player } from '../models/team.model';
-import { RankedPlayer } from '../utils/player-rankings';
+import { RankedPlayer, RankingHorizon } from '../utils/player-rankings';
 import { isLocked } from '../utils/start-sit';
 import { AvailableEntry, RosterEntry, WaiverAdvice, droppable, proTeamLocked, waiverAdvice } from '../utils/waivers';
 
@@ -70,6 +70,9 @@ export class WaiversService {
   // Whether each pickup is only paired with drops at its own position (a WR for a WR). Kept for the
   // session, so it survives switching tabs.
   readonly samePosition = signal(false);
+
+  // What pickups are ranked by: their rest-of-season gain, or this week's. Kept for the session too.
+  readonly horizon = signal<RankingHorizon>('restOfSeason');
 
   readonly refreshing = computed(() => this.startSit.refreshing() || this.rankingsService.refreshing());
   readonly error = this.startSit.error;
