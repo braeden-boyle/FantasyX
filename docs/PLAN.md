@@ -17,9 +17,9 @@
 | v1.9 — Player rankings | #19 `19-add-player-rankings` | Built and checked against a mock league; live-league checks still to do |
 | v1.10 — Matchup UI improvements | #21 `21-matchup-ui-improvements` | Built and checked against a mock API; live-league checks still to do |
 | v1.11 — NFL scoreboard | #23 `23-nfl-scoreboard` (PR #24) | Merged; checked against ESPN, a mock API and the live league. Live-game checks still to do |
-| Roster suggestions (parent) | #25, sub-issues #26–#28 | Start/sit (#26) merged. Waivers (#27) planned. Trades (#28) not started |
+| Roster suggestions (parent) | #25, sub-issues #26–#28 | Start/sit (#26) merged. Waivers (#27) built. Trades (#28) not started |
 | v1.12 — Start/sit assistant | #26 `26-add-start-sit-assistant` (PR #29) | Merged; checked against a mock API and the live league |
-| v1.13 — Waiver wire assistant | #27 `27-add-waiver-wire-assistant` | Planned |
+| v1.13 — Waiver wire assistant | #27 `27-add-waiver-wire-assistant` (PR #30) | Built; checked against the live league and simulated FAAB / failure cases |
 
 Sections below were first written as forward-looking plans. v1 and v1.1 are kept as the design record, with corrections where the build turned out differently.
 
@@ -1210,8 +1210,61 @@ Tell you which free agents and waiver players are worth claiming, and who to dro
    - Spot-check one suggestion by hand: the pickup's weekly projections against your weakest starter's, and the drop against the Players page.
    - The waiver priority or FAAB figure matches ESPN.
 
+## As built
+
+- **Backend:**
+  - `EspnLookups.TakesRosterSpot` (every slot but IR) is behind `RosterSize`.
+  - ESPN's budget fields are read as doubles and rounded to whole dollars, so a budget sent as `100.0` can't break the league call.
+- **`utils/waivers.ts`:**
+  - `WaiverPlayer` (`playerId`, `position`, `projections` by week), with `RosterEntry` (`injuredReserve`, `droppable`) and `AvailableEntry` (`locked`) built on it.
+  - `droppable(player, startingPositions, locked)` takes the lock as a flag. `proTeamLocked(proTeam, nflGames, now)` locks a free agent, since available players carry no kickoff time. It reads the week's NFL games, and locks nobody when the scoreboard couldn't be read.
+  - `weakestStarters` and `mightHelp` are the prefilter. `forPosition` applies the chip and `MAX_SUGGESTIONS`.
+  - A player already on the roster is never a pickup, since ESPN's free-agent list can lag a move.
+- **The drop search** (changed after the first build, which took about 450 ms on the live league): rather than trying every drop for 12 weeks, it uses three facts about best-lineup values:
+  - **Ceiling:** no pickup gains more than it would with an open spot. A pickup whose ceiling is under `MIN_GAIN` stops there.
+  - **Projection bound:** a pickup gains at most its own projected points minus what the drop costs the roster today.
+  - **Unaffected weeks:** dropping a player who isn't in a week's best lineup (with the pickup added) changes nothing that week, so only the weeks they start in are solved again.
+
+  Drops are tried cheapest first, and the search stops once neither bound lets a later drop beat the top two. That's 18–27 ms on the live league, with the same results, so there's no worker.
+- **Ties between drops** go to the one that costs the roster less today, then to whoever is projected for fewer points. On the live league, both an injured WR (0 projected) and a backup QB cost nothing, and the WR is dropped first.
+- **`WaiversService`:**
+  - Reuses `StartSitService`'s week, which the page force-loads on each visit, its one-minute lock clock (now exposed as `now`) and the week's `nflGames`.
+  - The locked sets are computed once per tick and compare equal when nothing flipped, so the advice only reruns when a lock changes, not every minute.
+  - The pool is the rest-of-season rankings' non-rostered players, and everyone's projections are their `weeklyProjections`.
+  - `PlayerRankingsService.refresh()` and `AvailablePlayersService.load(…, force)` refetch the available players. A refresh keeps the players on screen until the new ones arrive (`refreshing`).
+- **Page:**
+  - The summary reads "N pickups would improve your roster", then waiver priority or FAAB left, roster full or open spots, and the window's weeks.
+  - Each card reads "Add A / Drop B" (or "No drop needed"), with the ROS gain, this week's gain ("Nothing this week" when it rounds to 0) and "Starts N of M weeks". The alternative drop sits underneath.
+  - Pickups are tagged Waivers or Free agent, with their status and a Locked tag. Every player opens the drawer.
+  - The Refresh button reads "Refresh Players".
+
+## Verification done
+
+- **Builds:**
+  - `dotnet build`: 0 warnings, 0 errors.
+  - `ng build` passes. The initial bundle is unchanged (1.57 MB, 70 kB over the warning budget, as on `main`). The `/advice` chunk grows from 17.5 kB to 36.2 kB.
+  - Vitest: 173 tests, 19 of them new in `waivers.spec.ts`. Two compare against brute force on random rosters: the prefilter never skips a pickup that would gain (200 rosters with an open spot), and the bounded drop search finds the same best and next-best gains as trying every drop (150 full rosters).
+- **On the live league (week 6), with a backend built from this branch:**
+  - 260 available players. The prefilter kept 150, and 105 gain at least 0.5 pts over weeks 6–17.
+  - The top pickups are D/STs, each dropping an injured WR projected at 0 (or the backup QB, for the same gain). The WRs and kickers further down are bye-week fill-ins ("Starts 1 of 12 weeks").
+  - Waiver priority 9th of 14, roster full.
+  - Position chips filter the list, the drawer opens from any player, and Refresh refetches the week and available players while keeping the cards.
+  - FantasyX mode reruns the advice with the tag shown (the top D/ST goes from +30.7 to +34.9).
+  - No page overflow at 375px.
+- **Edge cases, by rewriting the app's own API responses in the page:**
+  - A FAAB league with $37 spent and one open roster spot: "FAAB $63 of $100 left", "1 open roster spot", and every card reads "No drop needed" with no alternative.
+  - The available players failing on Refresh: "Couldn't load the league's available players" with Retry, never an empty list, and Retry recovers.
+  - The clock a week ahead: 21 of 25 pickups locked (the rest on bye), each losing its this-week gain and a week of starts.
+- **Dev setup note:** the backend's Data Protection keys are tied to its content-root path (`AddDataProtection()` with no application name). A backend run from a worktree can't read credentials saved by the main checkout, and answers 500 on `GET /api/credentials`. Running it with `--contentRoot` set to the main checkout's `backend\` folder works around it.
+- **Not checked yet:**
+  - A real FAAB league.
+  - A pickup's lock flipping at kickoff while the page is open (only the clock jump above, and the unit tests).
+  - The week failing (shared with start/sit, which was checked in v1.12).
+  - The season being over. Only the rankings' `over` status covers it.
+
 ## Open questions
 
-- Whether `MIN_GAIN` (0.5 pts) is the right cut-off once seen on real rosters.
+- Whether `MIN_GAIN` (0.5 pts) is the right cut-off. On the live league, 105 pickups clear it, many of them bye-week fill-ins for a player worth nothing. A higher cut-off, or ranking those last, may read better.
 - Whether roster value's indifference to depth suggests dropping handcuffs and injured starters too eagerly. A player out for weeks still counts for the weeks after their return, but a backup is worth nothing until a starter's bye.
 - Whether claims that clear mid-week need their this-week gain hidden or discounted.
+- The rankings' rostered players come from the week loaded when the session started. A player another team dropped since then only shows up as available after a page reload, even after Refresh.
