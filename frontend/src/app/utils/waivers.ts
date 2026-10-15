@@ -32,18 +32,20 @@ export interface AvailableEntry extends WaiverPlayer {
 }
 
 // weeks is the window, this week first. rosterSize is how many players a roster holds outside IR
-// (0 when unknown, which reads as full).
+// (0 when unknown, which reads as full). samePosition pairs each pickup only with drops at its own
+// position (a WR for a WR); with an open spot nobody is dropped either way.
 export interface WaiverInput<R extends RosterEntry, A extends AvailableEntry> {
   roster: readonly R[];
   available: readonly A[];
   slots: readonly LineupSlot[];
   weeks: readonly number[];
   rosterSize: number;
+  samePosition?: boolean;
 }
 
 // One pickup: the player to add, the drop (null with an open spot), the rest-of-season and this
 // week's gains, and how many weeks of the window the pickup starts in. alternative is the next-best
-// drop, null with an open spot or nobody else to drop.
+// drop, null with an open spot, nobody else to drop, or when it would gain less than MIN_GAIN.
 export interface WaiverSuggestion<R extends RosterEntry, A extends AvailableEntry> {
   player: A;
   drop: R | null;
@@ -121,6 +123,7 @@ export function waiverAdvice<R extends RosterEntry, A extends AvailableEntry>({
   slots,
   weeks,
   rosterSize,
+  samePosition = false,
 }: WaiverInput<R, A>): WaiverAdvice<R, A> {
   const thisWeek = weeks[0];
   // A locked pickup's game this week has kicked off, so they count from next week.
@@ -178,6 +181,7 @@ export function waiverAdvice<R extends RosterEntry, A extends AvailableEntry>({
     let best: DropResult<R> | null = null;
     let next: DropResult<R> | null = null;
     for (const { player: drop, cost } of drops) {
+      if (samePosition && drop.position !== player.position) continue;
       // Drops come cheapest first, so this bound only falls; ties go to the earlier drop.
       if (next && Math.min(ceiling, projected - cost) <= next.gain + EPSILON) break;
       const result = dropResult(drop, player, added, withPickup, weeks, slots, projectionFor, before);
@@ -191,7 +195,7 @@ export function waiverAdvice<R extends RosterEntry, A extends AvailableEntry>({
       gain: best.gain,
       weekGain: best.weekGain,
       startsIn: best.startsIn,
-      alternative: next ? { drop: next.drop, gain: next.gain } : null,
+      alternative: next && next.gain >= MIN_GAIN ? { drop: next.drop, gain: next.gain } : null,
     });
   }
 

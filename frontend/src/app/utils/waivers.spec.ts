@@ -194,6 +194,32 @@ describe('the drop search', () => {
     expect(pickup.alternative?.gain).toBe(pickup.gain);
   });
 
+  it('pairs a pickup only with drops at its own position when asked', () => {
+    // The WR's best drop overall is the backup QB (+13); among WRs, the starting WR on bye in week 2
+    // (+8), then the backup WR (+6).
+    const [wr] = waiverAdvice({ roster, available: [available(10, 'WR', [11, 11])], slots, weeks, rosterSize: 6, samePosition: true })
+      .suggestions;
+    expect(wr.drop?.playerId).toBe(5);
+    expect(wr.gain).toBe(8);
+    expect(wr.alternative).toEqual({ drop: roster[5], gain: 6 });
+
+    // A QB worth starting in week 2 only: for the backup QB, +5; for the starter, 12 - 20 + 5 = -3,
+    // which isn't worth offering as an alternative.
+    const [qb] = waiverAdvice({ roster, available: [available(12, 'QB', [0, 25])], slots, weeks, rosterSize: 6, samePosition: true })
+      .suggestions;
+    expect(qb.drop?.playerId).toBe(2);
+    expect(qb.gain).toBe(5);
+    expect(qb.alternative).toBeNull();
+
+    // Nobody at TE to drop, so a TE can't be paired at all.
+    const te = waiverAdvice({ roster, available: [available(11, 'TE', [30, 30])], slots: [...slots, slot('TE', 1, ['TE'])], weeks, rosterSize: 6, samePosition: true });
+    expect(te.suggestions).toEqual([]);
+
+    // With an open spot nobody is dropped either way.
+    const open = waiverAdvice({ roster, available: [available(10, 'WR', [11, 11])], slots, weeks, rosterSize: 7, samePosition: true });
+    expect(open.suggestions[0].drop).toBeNull();
+  });
+
   it('finds the same best and next-best gains as trying every drop, on random full rosters', () => {
     let seed = 11;
     const random = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
@@ -206,11 +232,13 @@ describe('the drop search', () => {
         rostered(i + 1, positions[Math.floor(random() * 3)], points(), { droppable: random() > 0.15 }),
       );
       const pool = Array.from({ length: 4 }, (_, i) => available(100 + i, positions[Math.floor(random() * 3)], points()));
-      const advice = waiverAdvice({ roster: team, available: pool, slots, weeks: threeWeeks, rosterSize: 7 });
+      // Every other trial pairs pickups only with drops at their own position.
+      const samePosition = trial % 2 === 1;
+      const advice = waiverAdvice({ roster: team, available: pool, slots, weeks: threeWeeks, rosterSize: 7, samePosition });
       const before = valueOf(team, threeWeeks);
       for (const p of pool) {
         const gains = team
-          .filter((d) => d.droppable)
+          .filter((d) => d.droppable && (!samePosition || d.position === p.position))
           .map((d) => valueOf([...team.filter((q) => q !== d), p], threeWeeks) - before)
           .sort((a, b) => b - a);
         const suggestion = advice.suggestions.find((s) => s.player.playerId === p.playerId);
@@ -220,12 +248,12 @@ describe('the drop search', () => {
         }
         checked++;
         expect(suggestion?.gain).toBeCloseTo(gains[0], 9);
-        if (gains.length > 1) expect(suggestion?.alternative?.gain).toBeCloseTo(gains[1], 9);
+        if (gains.length > 1 && gains[1] >= MIN_GAIN) expect(suggestion?.alternative?.gain).toBeCloseTo(gains[1], 9);
         else expect(suggestion?.alternative).toBeNull();
         expect(valueOf([...team.filter((q) => q !== suggestion!.drop), p], threeWeeks) - before).toBeCloseTo(gains[0], 9);
       }
     }
-    expect(checked).toBeGreaterThan(100);
+    expect(checked).toBeGreaterThan(80);
   });
 });
 

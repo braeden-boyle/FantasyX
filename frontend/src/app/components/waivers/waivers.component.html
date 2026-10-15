@@ -91,20 +91,35 @@
           </section>
 
           <div class="flex flex-col gap-3">
-            <!-- Scrolls sideways rather than wrapping if a league's positions don't fit on a phone. -->
-            <div class="filter-scroll">
-              <p-selectbutton
-                [options]="positionOptions()"
-                [ngModel]="position()"
-                (ngModelChange)="setPosition($event)"
-                [allowEmpty]="false"
-                optionLabel="label"
-                optionValue="value"
-                ariaLabelledBy="waiver-position-filter"
-                size="small"
-              />
+            <div class="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
+              <!-- Scrolls sideways rather than wrapping if a league's positions don't fit on a phone. -->
+              <div class="filter-scroll">
+                <p-selectbutton
+                  [options]="positionOptions()"
+                  [ngModel]="position()"
+                  (ngModelChange)="setPosition($event)"
+                  [allowEmpty]="false"
+                  optionLabel="label"
+                  optionValue="value"
+                  ariaLabelledBy="waiver-position-filter"
+                  size="small"
+                />
+              </div>
+              <span id="waiver-position-filter" class="sr-only">Position</span>
+              @if (!a.openSpot) {
+                <div
+                  class="flex items-center gap-2"
+                  pTooltip="Pair each pickup only with a drop at its own position: a WR for a WR, a QB for a QB."
+                >
+                  <p-toggleswitch
+                    inputId="same-position"
+                    [ngModel]="waivers.samePosition()"
+                    (ngModelChange)="waivers.samePosition.set($event)"
+                  />
+                  <label for="same-position" class="text-sm whitespace-nowrap">Same-position drops</label>
+                </div>
+              }
             </div>
-            <span id="waiver-position-filter" class="sr-only">Position</span>
 
             @for (s of suggestions(); track s.player.playerId; let i = $index) {
               <div class="pickup-card">
@@ -190,7 +205,11 @@
             } @empty {
               <p class="text-surface-500">
                 @if (position() === 'ALL') {
-                  Nobody available beats your roster by {{ minGain }} points or more.
+                  Nobody available beats your roster by {{ minGain }} points or more{{
+                    waivers.samePosition() && !a.openSpot ? ' for a player at their own position' : ''
+                  }}.
+                } @else if (waivers.samePosition() && !a.openSpot) {
+                  Nobody available at {{ position() }} beats one of your {{ position() }}s.
                 } @else {
                   Nobody available at {{ position() }} beats your roster.
                 }

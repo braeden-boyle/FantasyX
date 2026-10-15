@@ -7,6 +7,7 @@ import { MessageModule } from 'primeng/message';
 import { ProgressSpinnerModule } from 'primeng/progressspinner';
 import { SelectButtonModule } from 'primeng/selectbutton';
 import { TagModule } from 'primeng/tag';
+import { ToggleSwitchModule } from 'primeng/toggleswitch';
 import { TooltipModule } from 'primeng/tooltip';
 import { TeamStateService } from '../../services/team-state.service';
 import { WaiversService } from '../../services/waivers.service';
@@ -32,6 +33,7 @@ const ALL = 'ALL';
     ProgressSpinnerModule,
     SelectButtonModule,
     TagModule,
+    ToggleSwitchModule,
     TooltipModule,
     PlayerAvatarComponent,
     PlayerDetailDrawerComponent,

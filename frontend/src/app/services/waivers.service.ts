@@ -1,4 +1,4 @@
-import { Injectable, computed, inject } from '@angular/core';
+import { Injectable, computed, inject, signal } from '@angular/core';
 import { LeagueOutlookService } from './league-outlook.service';
 import { PlayerRankingsService } from './player-rankings.service';
 import { ProjectionsService } from './projections.service';
@@ -66,6 +66,10 @@ export class WaiversService {
     if (this.outlook.error()) this.outlook.refresh();
     this.refresh();
   }
+
+  // Whether each pickup is only paired with drops at its own position (a WR for a WR). Kept for the
+  // session, so it survives switching tabs.
+  readonly samePosition = signal(false);
 
   readonly refreshing = computed(() => this.startSit.refreshing() || this.rankingsService.refreshing());
   readonly error = this.startSit.error;
@@ -159,6 +163,7 @@ export class WaiversService {
       slots: league.lineupSlots,
       weeks: this.weeks(),
       rosterSize: league.rosterSize,
+      samePosition: this.samePosition(),
     });
   });
 
