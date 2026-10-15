@@ -1,0 +1,279 @@
+@if (!teamState.importRequest()) {
+  <div class="max-w-xl mx-auto mt-10 p-4 text-center text-surface-500">
+    No team imported yet. <a routerLink="/import" class="text-primary-600 underline">Go import one</a>.
+  </div>
+} @else {
+  <div class="max-w-4xl mx-auto mt-6 p-4 flex flex-col gap-6">
+    <div class="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
+      <div class="flex flex-col gap-2">
+        <h1 class="text-2xl font-semibold whitespace-nowrap">
+          Waivers
+          @if (waivers.scoringPeriod(); as week) {
+            <span class="text-surface-500 font-normal">· Week {{ week }}</span>
+          }
+        </h1>
+        <app-projection-source />
+      </div>
+      <p-button
+        label="Refresh Players"
+        class="whitespace-nowrap"
+        icon="pi pi-refresh"
+        [text]="true"
+        size="small"
+        [loading]="waivers.refreshing()"
+        (onClick)="waivers.refresh()"
+      />
+    </div>
+
+    @switch (waivers.status()) {
+      @case ('error') {
+        <div class="flex flex-col items-start gap-3">
+          <p-message severity="error" [text]="waivers.error() ?? ''" class="w-full" />
+          <p-button label="Retry" icon="pi pi-refresh" size="small" (onClick)="waivers.retry()" />
+        </div>
+      }
+      @case ('unavailable') {
+        <div class="flex flex-col items-start gap-3">
+          <p-message
+            severity="warn"
+            text="Waiver advice is unavailable: the league's settings or projections couldn't be loaded."
+            class="w-full"
+          />
+          <p-button label="Retry" icon="pi pi-refresh" size="small" (onClick)="waivers.retry()" />
+        </div>
+      }
+      @case ('noAvailable') {
+        <div class="flex flex-col items-start gap-3">
+          <p-message severity="warn" text="Couldn't load the league's available players." class="w-full" />
+          <p-button label="Retry" icon="pi pi-refresh" size="small" (onClick)="waivers.retry()" />
+        </div>
+      }
+      @case ('over') {
+        <p-message severity="info" text="The season's over, so there's no one left to pick up." />
+      }
+      @case ('ready') {
+        @if (advice(); as a) {
+          <!-- Summary: how many pickups are worth it, and what you have to claim with. -->
+          <section class="summary-card" aria-live="polite">
+            @if (a.suggestions.length) {
+              <p class="text-lg font-medium">
+                {{ a.suggestions.length }} {{ a.suggestions.length === 1 ? 'pickup' : 'pickups' }} would improve your roster
+                @if (waivers.horizon() === 'week') {
+                  <span class="text-surface-500 font-normal">· {{ helpThisWeek() }} this week</span>
+                }
+              </p>
+            } @else {
+              <p class="text-lg font-medium">Nobody available beats your roster.</p>
+            }
+            <div class="flex flex-wrap gap-x-6 gap-y-1 text-sm text-surface-600 dark:text-surface-300">
+              @if (standing(); as s) {
+                @if (s.priority; as p) {
+                  <span>Waiver priority <span class="font-medium">{{ ordinal(p.rank) }}</span> of {{ p.teams }}</span>
+                }
+                @if (s.budget; as b) {
+                  <span>FAAB <span class="font-medium tabular-nums">${{ b.left }}</span> of ${{ b.total }} left</span>
+                }
+                @if (s.openSpots !== null) {
+                  <span>
+                    @if (s.openSpots) {
+                      {{ s.openSpots }} open roster {{ s.openSpots === 1 ? 'spot' : 'spots' }}
+                    } @else {
+                      Roster full
+                    }
+                  </span>
+                }
+              }
+              @if (waivers.rankings(); as r) {
+                <span
+                  pTooltip="Gains are the change in your best lineup each week, added up over the rest of the season, fantasy playoffs included."
+                >
+                  Rest of season: weeks {{ r.fromWeek }}–{{ r.toWeek }}
+                </span>
+              }
+            </div>
+          </section>
+
+          <div class="flex flex-col gap-3">
+            <div class="flex flex-wrap items-center gap-3">
+              <p-selectbutton
+                [options]="horizonOptions"
+                [ngModel]="waivers.horizon()"
+                (ngModelChange)="setHorizon($event)"
+                [allowEmpty]="false"
+                optionLabel="label"
+                optionValue="value"
+                ariaLabelledBy="waiver-horizon"
+                size="small"
+              />
+              <span id="waiver-horizon" class="sr-only">Rank pickups by</span>
+            </div>
+            <div class="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
+              <!-- Scrolls sideways rather than wrapping if a league's positions don't fit on a phone. -->
+              <div class="filter-scroll">
+                <p-selectbutton
+                  [options]="positionOptions()"
+                  [ngModel]="position()"
+                  (ngModelChange)="setPosition($event)"
+                  [allowEmpty]="false"
+                  optionLabel="label"
+                  optionValue="value"
+                  ariaLabelledBy="waiver-position-filter"
+                  size="small"
+                />
+              </div>
+              <span id="waiver-position-filter" class="sr-only">Position</span>
+              @if (!a.openSpot) {
+                <div
+                  class="flex items-center gap-2"
+                  pTooltip="Pair each pickup only with a drop at its own position: a WR for a WR, a QB for a QB."
+                >
+                  <p-toggleswitch
+                    inputId="same-position"
+                    [ngModel]="waivers.samePosition()"
+                    (ngModelChange)="waivers.samePosition.set($event)"
+                  />
+                  <label for="same-position" class="text-sm whitespace-nowrap">Same-position drops</label>
+                </div>
+              }
+            </div>
+
+            @for (s of suggestions(); track s.player.playerId; let i = $index) {
+              <div
+                class="pickup-card"
+                [id]="'pickup-' + s.player.playerId"
+                [class.highlighted]="s.player.playerId === highlightId"
+              >
+                <div class="pickup-players">
+                  <button type="button" class="pickup-player" (click)="openPlayer(s.player.player, i)">
+                    <span class="pickup-verb text-green-600 dark:text-green-400">Add</span>
+                    <app-player-avatar [player]="s.player.player" size="large" />
+                    <span class="flex flex-col min-w-0">
+                      <span class="font-medium truncate">{{ s.player.player.fullName }}</span>
+                      <span class="pickup-meta">
+                        {{ s.player.position }} · {{ s.player.player.proTeam }}
+                        <span
+                          class="tabular-nums"
+                          pTooltip="Position rank on rest-of-season projections, across the league and its free agents."
+                        >
+                          · {{ s.player.position }}{{ s.player.player.positionRank }} ROS
+                        </span>
+                        <p-tag
+                          [value]="s.player.player.status === 'WAIVERS' ? 'Waivers' : 'Free agent'"
+                          [severity]="s.player.player.status === 'WAIVERS' ? 'warn' : 'secondary'"
+                          styleClass="!text-xs"
+                        />
+                        @if (s.player.player.injuryStatus && s.player.player.injuryStatus !== 'ACTIVE') {
+                          <p-tag
+                            [severity]="statusSeverity(s.player.player.injuryStatus)"
+                            [value]="s.player.player.injuryStatus"
+                            styleClass="!text-xs"
+                          />
+                        }
+                        @if (s.player.locked) {
+                          <p-tag
+                            value="Locked"
+                            icon="pi pi-lock"
+                            severity="contrast"
+                            styleClass="!text-xs"
+                            pTooltip="Their game has kicked off, so they count from next week."
+                          />
+                        }
+                      </span>
+                    </span>
+                  </button>
+                  @if (s.drop; as d) {
+                    <button type="button" class="pickup-player" (click)="openPlayer(d.player, i)">
+                      <span class="pickup-verb text-surface-500 font-normal">Drop</span>
+                      <app-player-avatar [player]="d.player" size="large" />
+                      <span class="flex flex-col min-w-0">
+                        <span class="font-medium truncate">{{ d.player.fullName }}</span>
+                        <span class="pickup-meta">{{ d.position }} · {{ d.player.proTeam }} · {{ d.player.slot }}</span>
+                      </span>
+                    </button>
+                  } @else {
+                    <span class="text-sm text-surface-500">No drop needed</span>
+                  }
+                </div>
+                <!-- The gain pickups are ranked by comes first and stands out; the other sits under it. -->
+                <div class="pickup-figures">
+                  @if (waivers.horizon() === 'week') {
+                    <ng-container *ngTemplateOutlet="weekFigure; context: { $implicit: s, primary: true }" />
+                    <ng-container *ngTemplateOutlet="rosFigure; context: { $implicit: s, primary: false }" />
+                  } @else {
+                    <ng-container *ngTemplateOutlet="rosFigure; context: { $implicit: s, primary: true }" />
+                    <ng-container *ngTemplateOutlet="weekFigure; context: { $implicit: s, primary: false }" />
+                  }
+                  <span class="text-xs text-surface-500 tabular-nums">Starts {{ s.startsIn }} of {{ windowWeeks() }} weeks</span>
+                </div>
+                @if (s.alternative; as alt) {
+                  <div class="pickup-alternative text-xs text-surface-500">
+                    or drop
+                    <button type="button" class="link-button" (click)="openPlayer(alt.drop.player, i)">
+                      {{ alt.drop.player.fullName }}</button
+                    >,
+                    <span class="tabular-nums">+{{ alt.gain | number: '1.1-1' }}</span>
+                  </div>
+                }
+              </div>
+            } @empty {
+              <p class="text-surface-500">
+                @if (position() === 'ALL') {
+                  Nobody available beats your roster by {{ minGain }} points or more{{
+                    waivers.samePosition() && !a.openSpot ? ' for a player at their own position' : ''
+                  }}.
+                } @else if (waivers.samePosition() && !a.openSpot) {
+                  Nobody available at {{ position() }} beats one of your {{ position() }}s.
+                } @else {
+                  Nobody available at {{ position() }} beats your roster.
+                }
+              </p>
+            }
+          </div>
+        }
+      }
+      @default {
+        <div class="flex justify-center mt-10">
+          <p-progress-spinner ariaLabel="Loading waiver advice" />
+        </div>
+      }
+    }
+  </div>
+
+  <ng-template #rosFigure let-s let-primary="primary">
+    <span
+      class="tabular-nums"
+      [ngClass]="primary ? 'figure-primary text-green-600 dark:text-green-400' : 'text-xs text-surface-500'"
+      pTooltip="Projected points your best lineup gains over the rest of the season."
+    >
+      +{{ s.gain | number: '1.1-1' }} ROS
+    </span>
+  </ng-template>
+
+  <ng-template #weekFigure let-s let-primary="primary">
+    @let gain = signedGain(s.weekGain);
+    <span
+      class="tabular-nums"
+      [ngClass]="
+        !primary ? 'text-xs text-surface-500'
+        : s.weekGain > 0 && gain ? 'figure-primary text-green-600 dark:text-green-400'
+        : 'figure-primary text-surface-500'
+      "
+      pTooltip="Projected points your best lineup gains this week."
+    >
+      @if (gain) {
+        {{ gain }} this week
+      } @else {
+        Nothing this week
+      }
+    </span>
+  </ng-template>
+
+  <app-player-detail-drawer
+    [player]="selectedPlayer()"
+    [hasPrevious]="hasPreviousPlayer()"
+    [hasNext]="hasNextPlayer()"
+    (previous)="stepPlayer(-1)"
+    (next)="stepPlayer(1)"
+    (closed)="closePlayer()"
+  />
+}

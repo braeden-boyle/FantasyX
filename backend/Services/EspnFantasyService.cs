@@ -92,8 +92,23 @@ public class EspnFantasyService : IEspnFantasyService
             scheduleSettings?.PlayoffTeamCount ?? 0,
             scheduleSettings?.PlayoffSeedingRule,
             schedule,
-            StartingLineupSlots(league));
+            StartingLineupSlots(league),
+            RosterSize(league),
+            Acquisition(league));
     }
+
+    // How many players a roster holds outside IR, from mSettings' slot counts.
+    private static int RosterSize(EspnLeagueResponse league) =>
+        (league.Settings?.RosterSettings?.LineupSlotCounts ?? [])
+            .Where(entry => int.TryParse(entry.Key, out var id) && EspnLookups.TakesRosterSpot(id))
+            .Sum(entry => Math.Max(0, entry.Value));
+
+    private static AcquisitionDto? Acquisition(EspnLeagueResponse league) =>
+        league.Settings?.AcquisitionSettings is { } settings
+            ? new AcquisitionDto(
+                settings.IsUsingAcquisitionBudget ?? false,
+                (int)Math.Round(settings.AcquisitionBudget ?? 0))
+            : null;
 
     // The league's starting slots from mSettings, with how many of each a lineup has and the
     // positions that can fill them. IDP, bench and IR slots are left out (EspnLookups.StartingSlot).
@@ -171,7 +186,9 @@ public class EspnFantasyService : IEspnFantasyService
             overall?.PointsFor ?? 0,
             overall?.PointsAgainst ?? 0,
             StreakLabel(overall),
-            team.DivisionId ?? 0);
+            team.DivisionId ?? 0,
+            team.WaiverRank,
+            team.TransactionCounter?.AcquisitionBudgetSpent is { } spent ? (int)Math.Round(spent) : null);
     }
 
     private static string? StreakLabel(EspnOverallRecord? overall)

@@ -49,6 +49,9 @@ export class StartSitService {
 
   private readonly clock = signal(new Date());
   private clockRunning = false;
+  // The time locks are checked against, ticking every minute once advice is wanted. Waiver advice
+  // shares it, along with this service's week.
+  readonly now = this.clock.asReadonly();
 
   // Loads the advice from the cached week, if it isn't already (the roster hint).
   ensureLoaded(): void {
@@ -116,6 +119,8 @@ export class StartSitService {
   readonly error = computed(() => this.weekLoad()?.error ?? null);
   private readonly week = computed(() => this.weekLoad()?.week ?? null);
   readonly scoringPeriod = computed(() => this.week()?.scoringPeriod ?? null);
+  // This NFL week's games, for when free agents lock. Empty when ESPN's scoreboard couldn't be read.
+  readonly nflGames = computed(() => this.week()?.nflGames ?? []);
 
   // Your team and this week's opponent (null on a bye), from the loaded week.
   readonly side = computed<{ team: MatchupTeam; opponent: MatchupTeam | null } | null>(() => {

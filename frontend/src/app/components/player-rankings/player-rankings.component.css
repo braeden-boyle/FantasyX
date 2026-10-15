@@ -106,6 +106,27 @@
   color: var(--p-text-muted-color);
 }
 
+/* A suggested pickup's link to waiver advice, beside their FA/WA tag. */
+.pickup-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 50%;
+  color: var(--p-primary-color);
+  text-decoration: none;
+}
+
+.pickup-link:hover,
+.pickup-link:focus-visible {
+  background: var(--p-content-hover-background);
+}
+
+.pickup-link:focus-visible {
+  outline: 2px solid var(--p-primary-400);
+}
+
 .legend {
   font-size: 0.75rem;
   color: var(--p-text-muted-color);

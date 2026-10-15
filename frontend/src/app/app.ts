@@ -29,7 +29,7 @@ export class App {
     { route: '/team', label: 'My Team', icon: 'pi pi-user' },
     { route: '/matchup', label: 'Matchup', icon: 'pi pi-bolt' },
     { route: '/league', label: 'League', icon: 'pi pi-trophy' },
-    { route: '/players', label: 'Players', icon: 'pi pi-users' },
+    { route: '/rankings', label: 'Rankings', icon: 'pi pi-users' },
     { route: '/advice', label: 'Advice', icon: 'pi pi-lightbulb' },
   ];
 

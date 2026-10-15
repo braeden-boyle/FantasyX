@@ -1,6 +1,6 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { toObservable, toSignal } from '@angular/core/rxjs-interop';
-import { catchError, map, of, startWith, switchMap } from 'rxjs';
+import { catchError, map, of, scan, startWith, switchMap } from 'rxjs';
 import { AvailablePlayersService } from './available-players.service';
 import { LeagueOutlookService } from './league-outlook.service';
 import { ProjectionsService } from './projections.service';
@@ -17,7 +17,11 @@ import {
   startingPositions,
 } from '../utils/player-rankings';
 
-type AvailableLoad = { status: 'loading' } | { status: 'ready'; players: AvailablePlayer[] } | { status: 'failed' };
+// refreshing: a refresh is under way; ready keeps the players from before until it lands.
+type AvailableLoad =
+  | { status: 'loading' | 'refreshing' }
+  | { status: 'ready'; players: AvailablePlayer[]; refreshing?: boolean }
+  | { status: 'failed' };
 
 // loading     - still loading the league, rosters, projections or available players
 // ready       - ranked (rosteredOnly when the available players failed)
@@ -43,6 +47,8 @@ export class PlayerRankingsService {
   private readonly availablePlayers = inject(AvailablePlayersService);
 
   private readonly wanted = signal(false);
+  private readonly reloads = signal(0);
+  private forceNext = false;
 
   ensureLoaded(): void {
     this.outlook.ensureLoaded();
@@ -50,15 +56,30 @@ export class PlayerRankingsService {
     this.wanted.set(true);
   }
 
+  // Refetches the available players (waiver advice's Refresh). The rankings on screen stay until
+  // the new players arrive.
+  refresh(): void {
+    this.forceNext = true;
+    this.reloads.update((n) => n + 1);
+    this.ensureLoaded();
+  }
+
   // The available players are fetched for the league's starting positions once the league has
   // loaded, alongside the rosters' history rather than after it.
-  private readonly availableRequest = computed<{ request: ImportTeamRequest; positions: string[] } | null>(
+  // Carries the reload count, so a refresh is a new value.
+  private readonly availableRequest = computed<{ request: ImportTeamRequest; positions: string[]; reload: number } | null>(
     () => {
       const request = this.teamState.importRequest();
       const league = this.outlook.league();
-      return this.wanted() && request && league ? { request, positions: startingPositions(league.lineupSlots) } : null;
+      return this.wanted() && request && league
+        ? { request, positions: startingPositions(league.lineupSlots), reload: this.reloads() }
+        : null;
     },
-    { equal: (a, b) => a === b || (!!a && !!b && a.request === b.request && a.positions.join() === b.positions.join()) },
+    {
+      equal: (a, b) =>
+        a === b ||
+        (!!a && !!b && a.request === b.request && a.positions.join() === b.positions.join() && a.reload === b.reload),
+    },
   );
 
   private readonly availableLoad = toSignal(
@@ -66,13 +87,20 @@ export class PlayerRankingsService {
       switchMap((wanted) => {
         if (!wanted) return of(null);
         if (!wanted.positions.length) return of<AvailableLoad>({ status: 'ready', players: [] });
+        const force = this.forceNext;
+        this.forceNext = false;
         return this.weekMatchups.load().pipe(
-          switchMap((week) => this.availablePlayers.load(week.scoringPeriod, wanted.positions)),
+          switchMap((week) => this.availablePlayers.load(week.scoringPeriod, wanted.positions, force)),
           map((players): AvailableLoad => ({ status: 'ready', players })),
           catchError(() => of<AvailableLoad>({ status: 'failed' })),
-          startWith<AvailableLoad>({ status: 'loading' }),
+          startWith<AvailableLoad>({ status: force ? 'refreshing' : 'loading' }),
         );
       }),
+      // A refresh keeps the players on screen until the new ones arrive.
+      scan((previous: AvailableLoad | null, current: AvailableLoad | null): AvailableLoad | null => {
+        if (current?.status !== 'refreshing') return current;
+        return previous?.status === 'ready' ? { ...previous, refreshing: true } : { status: 'loading' };
+      }, null),
     ),
     { initialValue: null },
   );
@@ -85,7 +113,9 @@ export class PlayerRankingsService {
     const league = this.outlook.league();
     const history = this.projections.loadedHistory();
     const available = this.availableLoad();
-    if (!league || !history || !available || available.status === 'loading') return { status: 'loading' };
+    if (!league || !history || !available || available.status === 'loading' || available.status === 'refreshing') {
+      return { status: 'loading' };
+    }
     if (!league.lineupSlots.length) return { status: 'unavailable' };
     return {
       status: 'ready',
@@ -110,6 +140,12 @@ export class PlayerRankingsService {
       return load.status === 'ready' ? buildPlayerRankings(load.input, this.settings.projectionSource(), horizon) : null;
     });
   }
+
+  // Whether a refresh of the available players is under way.
+  readonly refreshing = computed(() => {
+    const available = this.availableLoad();
+    return available?.status === 'ready' && !!available.refreshing;
+  });
 
   readonly status = computed<PlayerRankingsStatus>(() => {
     const load = this.input();

@@ -37,6 +37,8 @@ public static class EspnLookups
 
     private static readonly HashSet<int> BenchSlots = [20, 21];
 
+    private const int InjuredReserveSlotId = 21;
+
     // The positions each offensive starting slot accepts. Slots not listed (bench, IR, and the
     // individual defensive player slots) are left out of draft-day lineups.
     private static readonly IReadOnlyDictionary<int, (string Name, string[] Positions)> StartingSlots =
@@ -80,6 +82,9 @@ public static class EspnLookups
             : OtherSlots.GetValueOrDefault(lineupSlotId, $"SLOT_{lineupSlotId}");
 
     public static bool IsStarterSlot(int lineupSlotId) => !BenchSlots.Contains(lineupSlotId);
+
+    // Every slot but IR takes a roster spot: starters, bench and IDP alike.
+    public static bool TakesRosterSpot(int lineupSlotId) => lineupSlotId != InjuredReserveSlotId;
 
     // A starting slot's name and the positions that can fill it; null for bench, IR and slots
     // draft-day lineups don't fill.

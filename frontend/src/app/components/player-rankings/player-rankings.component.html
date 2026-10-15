@@ -6,7 +6,7 @@
   <div class="max-w-6xl mx-auto mt-10 p-4 flex flex-col gap-4">
     <div class="flex flex-col gap-1">
       <div class="flex flex-wrap items-center justify-between gap-2">
-        <h1 class="text-2xl font-semibold">Players</h1>
+        <h1 class="text-2xl font-semibold">Rankings</h1>
         @if (status() === 'ready') {
           <app-projection-source />
         }
@@ -77,6 +77,16 @@
             <i class="pi pi-exclamation-circle text-xs"></i>
             Available players couldn't be loaded, so only rostered players are ranked, and replacement levels are
             estimated from rostered players.
+          </p>
+        }
+
+        @if (waivers.suggestionCount() && availability() !== 'rostered') {
+          <p class="note">
+            <i class="pi pi-user-plus text-xs"></i>
+            {{ waivers.suggestionCount() }} available {{ waivers.suggestionCount() === 1 ? 'player' : 'players' }}
+            would improve your roster, marked
+            <i class="pi pi-user-plus text-xs" aria-label="with the add icon"></i>.
+            <a routerLink="/advice/waivers" class="text-primary-600 dark:text-primary-400 underline">See waiver advice</a>
           </p>
         }
 
@@ -331,10 +341,28 @@
                     <app-team-logo [logoUrl]="t.logoUrl" [abbrev]="t.abbrev" />
                     <span>{{ t.abbrev }}</span>
                   </span>
-                } @else if (p.status === 'WAIVERS') {
-                  <p-tag severity="warn" value="WA" pTooltip="On waivers" aria-label="On waivers" />
                 } @else {
-                  <p-tag severity="success" value="FA" pTooltip="Free agent" aria-label="Free agent" />
+                  <span class="flex items-center gap-2">
+                    @if (p.status === 'WAIVERS') {
+                      <p-tag severity="warn" value="WA" pTooltip="On waivers" aria-label="On waivers" />
+                    } @else {
+                      <p-tag severity="success" value="FA" pTooltip="Free agent" aria-label="Free agent" />
+                    }
+                    @if (waivers.suggestionFor(p.playerId)) {
+                      <!-- Opens waiver advice at the player's position, with their card picked out. -->
+                      <a
+                        routerLink="/advice/waivers"
+                        [queryParams]="{ position: p.position, player: p.playerId }"
+                        class="pickup-link"
+                        [pTooltip]="pickupTooltip(p.playerId)"
+                        [attr.aria-label]="'Waiver advice for ' + p.fullName + ': ' + pickupTooltip(p.playerId)"
+                        (click)="$event.stopPropagation()"
+                        (keydown.enter)="$event.stopPropagation()"
+                      >
+                        <i class="pi pi-user-plus"></i>
+                      </a>
+                    }
+                  </span>
                 }
               </td>
             </tr>

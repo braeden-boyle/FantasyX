@@ -43,7 +43,8 @@ export interface Team {
 }
 
 // streak is compact, e.g. "W3"; seed is 0 when ESPN hasn't ranked teams yet. divisionId is 0 in a
-// league without divisions.
+// league without divisions. waiverRank is the team's waiver priority (1 claims first) and
+// budgetSpent its FAAB spent this season, both null when ESPN doesn't send them.
 export interface Standing {
   teamId: number;
   seed: number;
@@ -58,6 +59,8 @@ export interface Standing {
   pointsAgainst: number;
   streak: string | null;
   divisionId: number;
+  waiverRank: number | null;
+  budgetSpent: number | null;
 }
 
 export interface MatchupSide {
@@ -85,7 +88,8 @@ export interface ScheduledMatchup {
 // scoringPeriodsByMatchupPeriod lists the NFL weeks in each matchup period, keyed by period as a
 // string, playoffs included (a playoff round can span two weeks).
 // regularSeasonMatchupPeriods and playoffTeamCount are 0 when ESPN doesn't send them.
-// lineupSlots are the starting slots (bench, IR and IDP left out).
+// lineupSlots are the starting slots (bench, IR and IDP left out). rosterSize is how many players a
+// roster holds outside IR (0 when unknown); acquisition is null when ESPN doesn't send it.
 export interface League {
   leagueName: string;
   currentMatchupPeriod: number;
@@ -97,6 +101,15 @@ export interface League {
   playoffSeedingRule: string | null;
   schedule: ScheduledMatchup[];
   lineupSlots: LineupSlot[];
+  rosterSize: number;
+  acquisition: Acquisition | null;
+}
+
+// How the league adds players: usesBudget in a FAAB league, where budget is each team's season
+// budget. ESPN sends a budget even when it's unused.
+export interface Acquisition {
+  usesBudget: boolean;
+  budget: number;
 }
 
 // points are totals for the whole matchup period; each player's points are for scoringPeriod only.
