@@ -1228,12 +1228,12 @@ Tell you which free agents and waiver players are worth claiming, and who to dro
   Drops are tried cheapest first, and the search stops once neither bound lets a later drop beat the top two. That's 18–27 ms on the live league, with the same results, so there's no worker.
 - **Ties between drops** go to the one that costs the roster less today, then to whoever is projected for fewer points. On the live league, both an injured WR (0 projected) and a backup QB cost nothing, and the WR is dropped first.
 - **The alternative drop** is only shown when it gains at least `MIN_GAIN` on its own. Before, a pickup with one sensible drop could offer "or drop Lamar Jackson, -31.9".
-- **Same-position drops** (added 2026-10-15, at the user's request): a toggle beside the position chips pairs each pickup only with drops at its own position, a WR for a WR, a QB for a QB.
+- **Same-position drops** (added 2026-10-15, at the user's request, and on by default): a toggle beside the position chips pairs each pickup only with drops at its own position, a WR for a WR, a QB for a QB.
   - It's `samePosition` on `waiverAdvice`, which skips other positions' drops in the same cheapest-first search. A pickup with no droppable player at its position drops out.
   - It's hidden with an open roster spot, where nobody is dropped.
   - `WaiversService.samePosition` keeps it for the session.
   - On the live league it turns 105 pickups into 62. The D/STs now drop the Saints D/ST rather than the injured WR, and the QBs drop the backup QB.
-- **Rank by** (added 2026-10-15, at the user's request): a **Rest of Season / This Week** switch above the chips, with the Players page's labels.
+- **Rank by** (added 2026-10-15, at the user's request): a **This Week / Rest of Season** switch above the chips, with the Players page's labels. This Week is the default and comes first.
   - It only changes the order (`rankSuggestions`). The pickups and their drops stay the same, since a drop is for good and is still judged over the rest of the season.
   - The ranking gain is compared as shown, to one decimal, so a week gain too small to show (+0.04, "Nothing this week") doesn't outrank 0. The other gain breaks ties.
   - Each card's ranking gain comes first, in the primary green, and the other moves to the small line under it. A week gain that rounds to nothing reads "Nothing this week" in grey.

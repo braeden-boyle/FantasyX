@@ -67,12 +67,13 @@ export class WaiversService {
     this.refresh();
   }
 
-  // Whether each pickup is only paired with drops at its own position (a WR for a WR). Kept for the
-  // session, so it survives switching tabs.
-  readonly samePosition = signal(false);
+  // Whether each pickup is only paired with drops at its own position (a WR for a WR); on by
+  // default. Kept for the session, so it survives switching tabs.
+  readonly samePosition = signal(true);
 
-  // What pickups are ranked by: their rest-of-season gain, or this week's. Kept for the session too.
-  readonly horizon = signal<RankingHorizon>('restOfSeason');
+  // What pickups are ranked by: this week's gain (the default), or their rest-of-season gain. Kept
+  // for the session too.
+  readonly horizon = signal<RankingHorizon>('week');
 
   readonly refreshing = computed(() => this.startSit.refreshing() || this.rankingsService.refreshing());
   readonly error = this.startSit.error;

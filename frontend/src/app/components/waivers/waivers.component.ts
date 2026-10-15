@@ -68,8 +68,8 @@ export class WaiversComponent {
   ]);
 
   protected readonly horizonOptions: { label: string; value: RankingHorizon }[] = [
-    { label: 'Rest of Season', value: 'restOfSeason' },
     { label: 'This Week', value: 'week' },
+    { label: 'Rest of Season', value: 'restOfSeason' },
   ];
 
   protected readonly suggestions = computed(() => {
