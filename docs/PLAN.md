@@ -1,6 +1,6 @@
 # FantasyX — Plan
 
-## Status (as of 2026-10-14)
+## Status (as of 2026-10-15)
 
 | Milestone | GitHub issue / branch | State |
 |---|---|---|
@@ -17,8 +17,9 @@
 | v1.9 — Player rankings | #19 `19-add-player-rankings` | Built and checked against a mock league; live-league checks still to do |
 | v1.10 — Matchup UI improvements | #21 `21-matchup-ui-improvements` | Built and checked against a mock API; live-league checks still to do |
 | v1.11 — NFL scoreboard | #23 `23-nfl-scoreboard` (PR #24) | Merged; checked against ESPN, a mock API and the live league. Live-game checks still to do |
-| Roster suggestions (parent) | #25, sub-issues #26–#28 | Planning. Waivers (#27) and trades (#28) are blocked by #26 |
-| v1.12 — Start/sit assistant | #26 `26-add-start-sit-assistant` (PR #29) | Built; checked against a mock API and the live league |
+| Roster suggestions (parent) | #25, sub-issues #26–#28 | Start/sit (#26) merged. Waivers (#27) planned. Trades (#28) not started |
+| v1.12 — Start/sit assistant | #26 `26-add-start-sit-assistant` (PR #29) | Merged; checked against a mock API and the live league |
+| v1.13 — Waiver wire assistant | #27 `27-add-waiver-wire-assistant` | Planned |
 
 Sections below were first written as forward-looking plans. v1 and v1.1 are kept as the design record, with corrections where the build turned out differently.
 
@@ -1082,3 +1083,122 @@ Tell you who to start this week. Compare your set lineup with the best one your 
 - Whether a weekly position rank is worth its cost: it loads the available players on every Advice visit (cached per session).
 - Whether the toss-up threshold (55%) feels right once seen on real lineups.
 - Risk-aware lineups for heavy underdogs or favourites. They're deferred, and could come back as a "Play to win" switch using the same spreads.
+
+---
+
+# v1.13: Waiver wire assistant (issue #27) — on `27-add-waiver-wire-assistant`
+
+## Goal
+
+Tell you which free agents and waiver players are worth claiming, and who to drop for them. A pickup is judged by how much it raises your roster value (the best lineup you can field each week, summed over the rest of the season), so "better than your starter" counts, not raw rank. Builds on v1.12's lineup optimizer and `rosterValue`, and on v1.9's available-player pool.
+
+## Decisions (asked 2026-10-15)
+
+- **Placement:** the **Waivers** sub-tab of Advice (`/advice/waivers`), enabled now. It's in the lazy `/advice` chunk.
+  - **Your team only**, as with start/sit.
+  - **No hints elsewhere.** The roster page doesn't load the available players, and start/sit's warnings stay as they are.
+- **Ranking: rest-of-season gain, with this week's beside it.** Each pickup is ranked by its roster value gain: `rosterValue` after the add and drop, minus before, over the shared window (this week through the last week of the fantasy playoffs). This week's best-lineup gain is shown next to it ("+18.4 ROS · +3.1 this week"), but doesn't rank.
+- **Drop: the best one per pickup.** For each pickup, every droppable player is tried, and the drop that leaves the highest roster value wins. The next-best drop is shown as the alternative ("or drop Z, +15.2").
+  - With an open roster spot, no drop is needed. "No drop" is simply one of the options, so it wins whenever dropping anyone would cost value.
+  - **Not droppable:** players on IR (the IR slot doesn't free a bench spot, and roster value leaves them out, so they'd look free), players at positions no starting slot takes (IDP, which roster value can't see), and locked players.
+- **Waiver info: status, priority and FAAB left.**
+  - Each player is tagged **Free agent** or **Waivers** (already on `AvailablePlayer.status`).
+  - The summary shows your waiver priority ("3rd of 12") or, in a FAAB league, your budget left ("$64 of $100").
+  - No bid suggestions.
+- **Who gets evaluated: a safe prefilter, then everyone left, on the main thread.**
+  - The pool is the available players v1.9 already loads (`AVAILABLE_PER_POSITION`, 50 per starting position), with their weekly projections from the rest-of-season rankings.
+  - **Prefilter:** a player is evaluated only if, in some week of the window, they out-project the weakest starter in that week's best lineup, or that lineup has an empty slot. A pickup can only raise a week's best lineup by bumping its weakest starter to the bench (through a chain of moves if need be) or by filling an empty slot, and a drop only lowers it. So anyone the prefilter skips has no positive gain with any drop. Comparing with eligible starters only would not be safe: with `RB/WR` and `WR/TE` slots, an RB can gain by pushing a WR into `WR/TE`.
+  - The rest (typically a few dozen) are evaluated against every drop, inline. The build measures it on the live league, and moves it to a web worker, like playoff odds, only if it's slow.
+- **The list: positive gains only, with position chips.**
+  - Pickups whose best add/drop gains at least `MIN_GAIN` (0.5 pts), up to `MAX_SUGGESTIONS` (25), best first.
+  - Chips: **All** and each of the league's starting positions (`startingPositions`). A chip filters the pickups by position, still up to 25.
+  - Empty state: "Nobody available beats your roster" (or "…at WR" under a chip).
+- **Locks:** start/sit's `isLocked`.
+  - A locked free agent (their game has kicked off) can still be suggested. Their this-week projection counts as 0, so their gain comes from next week on.
+  - A locked rostered player isn't offered as a drop.
+  - Locks are re-checked every minute against the clock, as on start/sit.
+- **Projections** follow the ESPN / FantasyX setting, with the "FantasyX projections" tag (v1.7).
+- **Not done:** making claims on ESPN (the app stays read-only), FAAB bid suggestions, two-for-one moves (add two, drop two), and when a waiver claim clears (the this-week gain assumes it clears before the player's game).
+
+## Backend
+
+- **`LeagueDto`** (`POST /api/espn/league`, already fetched with `mTeam` and `mSettings`) gains:
+  - `RosterSize`: the sum of `rosterSettings.lineupSlotCounts` over every slot but IR (21), bench and IDP included. You have an open spot when your players off IR number fewer than this.
+  - `Acquisition`: `{ UsesBudget, Budget }`, from `settings.acquisitionSettings` (`isUsingAcquisitionBudget`, `acquisitionBudget`). Null when ESPN doesn't send it.
+- **`StandingDto`** gains `WaiverRank` (the team's `waiverRank`) and `BudgetSpent` (`transactionCounter.acquisitionBudgetSpent`), both nullable.
+- **Spike first:** confirm those four ESPN field names on the live league's raw response before modelling them, the way v1.11 checked the scoreboard.
+- Nothing else. `POST /api/espn/available-players` already returns each player's status, weekly history and upcoming projections.
+
+## Frontend
+
+- **Models:** `League` gains `rosterSize` and `acquisition: { usesBudget: boolean; budget: number } | null`. `Standing` gains `waiverRank` and `budgetSpent` (`number | null`).
+- **`utils/waivers.ts`** (new, pure). Every tunable constant lives here.
+  - `WaiverCandidate { playerId, position, projections: Record<number, number> }`, the shape `rosterValue` reads, with each week's projection.
+  - `weakestStarters(roster, slots, weeks, projectionFor)`: for each week, the lowest projection in the roster's best lineup, or 0 when a slot is left empty. Built with `optimalLineup` once per week.
+  - `mightHelp(candidate, weakest)`: the prefilter above.
+  - `droppable(player, now)`: not IR, at a starting position, and not locked.
+  - `bestMoves(roster, candidate, input)`: for each option (no drop when there's room, then each droppable player), the roster value after it. Returns the best and next-best, with the ROS gain, this week's gain (`byWeek` of this week, after minus before), and how many weeks of the window the pickup starts in.
+  - `waiverAdvice(input)`: the before value, the prefiltered candidates, their best moves, cut to `MIN_GAIN` and sorted by ROS gain, then this week's gain, then player id. Also returns how many were evaluated and skipped, for the timing check.
+  - A locked candidate's projection for this week is 0. Projections for everyone, rostered or available, come from the rest-of-season rankings' `weeklyProjections` (the active source over the same window).
+- **`WaiversService`** (root, only injected by the lazy page so it stays out of the initial bundle):
+  - Combines your roster from `WeekMatchupsService` (as start/sit picks it), `lineupSlots`, `rosterSize`, `acquisition` and your standing from `LeagueOutlookService`, and the rest-of-season `PlayerRankingsService.rankings()` for the pool and projections.
+  - Exposes `advice`, `status` (`loading`, `error`, `unavailable`, `over`, `ready`), `retry()` and `refresh()`.
+  - **Freshness:** the page force-loads the week on each visit (you may have just made a move on ESPN), like start/sit. The available players stay cached for the session. Refresh refetches them too, through a new `force` flag on `AvailablePlayersService.load` and a `refresh()` on `PlayerRankingsService`, since other managers' claims change who's available.
+  - A rostered player missing from the rankings (added since they loaded, and outside the top 50 available) is valued with `ProjectionsService.futureProjectionOf`. The build checks that a just-added player isn't valued at 0.
+- **`WaiversComponent`** (`/advice/waivers`):
+  - **A summary card:** your waiver priority or FAAB left, whether you have an open roster spot, and the projection-source tag.
+  - **Position chips.**
+  - **The pickups,** each reading "Add A, drop B":
+    - Both players' avatars, positions and teams, and the pickup's Free agent / Waivers tag and injury status.
+    - The ROS gain, this week's gain, and "Starts 8 of 11 weeks".
+    - The pickup's v1.9 position rank ("WR28 ROS") for context.
+    - The next-best drop beneath, when there is one.
+    - Rows open the existing player drawer.
+  - A Refresh button. On phones the pickups stack as cards.
+  - `advice.routes.ts` gets the route, and `AdviceComponent` marks Waivers ready.
+- **Failure:**
+  - The week fails: the error and Retry, as on start/sit.
+  - The league or rankings are unavailable: "Waiver advice unavailable", with Retry.
+  - The available players failed (`rosteredOnly`): "Couldn't load the available players", with Retry. Never an empty list that reads as "nobody beats your roster".
+  - The fantasy playoffs are over (`over`): "The season's over."
+  - No waiver rank or acquisition settings: the summary leaves that line out.
+  - FantasyX projections loading or unavailable: as on start/sit.
+
+## Verification
+
+1. **Vitest** (`waivers.spec.ts`):
+   - The gain equals `rosterValue` after minus before.
+   - The prefilter never skips a player with a positive gain, including the `RB/WR` + `WR/TE` case, and skips a player who beats no starter in any week.
+   - With an open spot there's no drop, and a full roster drops someone.
+   - The best drop is chosen across positions: dropping a backup RB beats dropping a starting WR, and a fourth QB goes before anyone else.
+   - IR players, IDP players and locked players are never dropped. IR players don't count toward the open-spot check.
+   - A locked free agent gains nothing this week but keeps their later weeks.
+   - `MIN_GAIN`, `MAX_SUGGESTIONS`, the sort order, and the position filter.
+   - The existing lineup, start/sit and player-rankings tests still pass.
+2. **Backend:** `dotnet build`, and the spike's field names. Check `RosterSize`, `WaiverRank`, `BudgetSpent` and `Acquisition` against what ESPN's own league page shows, on a FAAB league if one is available.
+3. **UI against a mock API:** cover these cases:
+   - a full roster, with a clear upgrade at one position and a weak player at another
+   - an open roster spot
+   - a free agent whose game is in progress
+   - a waiver player
+   - a FAAB league and a waiver-priority league
+   - nobody worth adding
+   - the available players failing
+   - the playoffs over
+
+   Then check:
+   - The chips filter and the empty state.
+   - Switching to FantasyX re-runs the advice, and the tag follows.
+   - Refresh refetches the available players.
+   - No page overflow at 375px.
+   - The initial bundle doesn't grow.
+4. **Live league:**
+   - Time `waiverAdvice` and note how many players the prefilter kept. Move it to a worker if it takes over about 100 ms.
+   - Spot-check one suggestion by hand: the pickup's weekly projections against your weakest starter's, and the drop against the Players page.
+   - The waiver priority or FAAB figure matches ESPN.
+
+## Open questions
+
+- Whether `MIN_GAIN` (0.5 pts) is the right cut-off once seen on real rosters.
+- Whether roster value's indifference to depth suggests dropping handcuffs and injured starters too eagerly. A player out for weeks still counts for the weeks after their return, but a backup is worth nothing until a starter's bye.
+- Whether claims that clear mid-week need their this-week gain hidden or discounted.
