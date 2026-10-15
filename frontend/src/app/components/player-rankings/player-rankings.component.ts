@@ -58,7 +58,7 @@ const REST_OF_SEASON_ONLY: ReadonlySet<SortField> = new Set(['restOfSeason', 're
 
 const PAGE_SIZE = 50;
 
-// /players: FantasyX's ranking of every player in the league's pool, rostered or available, by
+// /rankings: FantasyX's ranking of every player in the league's pool, rostered or available, by
 // rest-of-season value over replacement. Filters by position, availability and name; every column
 // sorts. Rows open the player drawer, which steps through the rows as they're shown.
 @Component({

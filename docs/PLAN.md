@@ -1245,6 +1245,7 @@ Tell you which free agents and waiver players are worth claiming, and who to dro
   - Above the table, "62 available players would improve your roster … See waiver advice", hidden on the Rostered filter.
   - The Players page builds the advice from the cached week (`WaiversService.ensureLoaded`), with no extra fetches. The waiver code moves to a chunk shared by the two lazy pages, so the initial bundle doesn't grow.
   - On the live league, the Available filter's first page has 29 links. The kickers have none: with same-position drops, a kicker would have to replace the user's, and none beats him.
+- **Players became Rankings** (2026-10-15, at the user's request): the page heading, the nav tab and the address (`/rankings`) are renamed. `/players` redirects to `/rankings`, so old bookmarks still work. Earlier sections still say `/players` and "the Players page", as written at the time.
 - **`WaiversService`:**
   - Reuses `StartSitService`'s week, which the page force-loads on each visit, its one-minute lock clock (now exposed as `now`) and the week's `nflGames`.
   - The locked sets are computed once per tick and compare equal when nothing flipped, so the advice only reruns when a lock changes, not every minute.

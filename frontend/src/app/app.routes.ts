@@ -17,7 +17,7 @@ export const routes: Routes = [
   // Plain /matchup is the user's own matchup; /matchup/:teamId is that team's current matchup.
   { path: 'matchup', component: MatchupComponent },
   // One NFL game from the strip of the week's games. ?team= names the matchup it was opened from.
-  // Loaded on first visit, like /players.
+  // Loaded on first visit, like /rankings.
   {
     path: 'matchup/game/:gameId',
     loadComponent: () => import('./components/nfl-game/nfl-game.component').then((m) => m.NflGameComponent),
@@ -26,12 +26,14 @@ export const routes: Routes = [
   // FantasyX's player rankings, rostered and available players alike. Loaded on first visit, to keep
   // its table and filters out of the initial bundle.
   {
-    path: 'players',
+    path: 'rankings',
     loadComponent: () =>
       import('./components/player-rankings/player-rankings.component').then((m) => m.PlayerRankingsComponent),
   },
-  // Roster advice: start/sit now, waivers and trades later, each a child route. Loaded on first
-  // visit, like /players.
+  // The rankings' old address, so bookmarks and links to it still work.
+  { path: 'players', redirectTo: 'rankings' },
+  // Roster advice: start/sit and waivers now, trades later, each a child route. Loaded on first
+  // visit, like /rankings.
   {
     path: 'advice',
     loadChildren: () => import('./components/advice/advice.routes').then((m) => m.ADVICE_ROUTES),
