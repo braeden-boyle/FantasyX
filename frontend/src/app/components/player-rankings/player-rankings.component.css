@@ -115,6 +115,7 @@
   height: 1.75rem;
   border-radius: 50%;
   color: var(--p-primary-color);
+  text-decoration: none;
 }
 
 .pickup-link:hover,
