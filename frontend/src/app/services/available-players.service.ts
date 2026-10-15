@@ -8,7 +8,8 @@ import { AVAILABLE_PER_POSITION } from '../utils/player-rankings';
 // Session cache of the league's most-owned free agents and waiver players at each starting
 // position, with their history and upcoming projections, for player rankings. Only loaded when the
 // rankings are wanted. Like PlayerHistoryService, a new scoring period or a different import
-// refetches it.
+// refetches it, and so does force (waiver advice's Refresh, since other teams' claims change who's
+// available).
 @Injectable({ providedIn: 'root' })
 export class AvailablePlayersService {
   private readonly espnApi = inject(EspnApiService);
@@ -17,7 +18,7 @@ export class AvailablePlayersService {
   private cachedFor: { request: ImportTeamRequest; scoringPeriod: number; positions: string } | null = null;
   private cached: Observable<AvailablePlayer[]> | null = null;
 
-  load(scoringPeriod: number, positions: readonly string[]): Observable<AvailablePlayer[]> {
+  load(scoringPeriod: number, positions: readonly string[], force = false): Observable<AvailablePlayer[]> {
     const request = this.teamState.importRequest();
     if (!request) {
       return throwError(() => new Error('No team has been imported.'));
@@ -26,6 +27,7 @@ export class AvailablePlayersService {
     const key = positions.join(',');
     const cachedFor = this.cachedFor;
     if (
+      force ||
       !this.cached ||
       cachedFor?.request !== request ||
       cachedFor.scoringPeriod !== scoringPeriod ||

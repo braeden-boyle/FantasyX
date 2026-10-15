@@ -46,7 +46,7 @@ export class AdviceComponent {
 
   protected readonly tools = [
     { route: '/advice/start-sit', label: 'Start/Sit', icon: 'pi pi-sort-alt', ready: true },
-    { route: '/advice/waivers', label: 'Waivers', icon: 'pi pi-user-plus', ready: false },
+    { route: '/advice/waivers', label: 'Waivers', icon: 'pi pi-user-plus', ready: true },
     { route: '/advice/trades', label: 'Trades', icon: 'pi pi-arrow-right-arrow-left', ready: false },
   ];
 
