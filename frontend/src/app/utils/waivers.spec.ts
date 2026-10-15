@@ -183,6 +183,52 @@ describe('the prefilter', () => {
   });
 });
 
+describe('the drop search', () => {
+  it('breaks a tie in cost by dropping whoever is projected for less', () => {
+    // Neither the backup QB (12 a week) nor an injured WR (0) ever starts, so both cost nothing.
+    const team = [...roster.filter((p) => p.playerId !== 6), rostered(6, 'WR', [0, 0])];
+    const [pickup] = waiverAdvice({ roster: team, available: [available(10, 'WR', [11, 11])], slots, weeks, rosterSize: 6 })
+      .suggestions;
+    expect(pickup.drop?.playerId).toBe(6);
+    expect(pickup.alternative?.drop.playerId).toBe(2);
+    expect(pickup.alternative?.gain).toBe(pickup.gain);
+  });
+
+  it('finds the same best and next-best gains as trying every drop, on random full rosters', () => {
+    let seed = 11;
+    const random = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+    const positions = ['QB', 'RB', 'WR'];
+    const points = () => [0, 1, 2].map(() => (random() < 0.2 ? 0 : Math.round(random() * 20)));
+    const threeWeeks = [1, 2, 3];
+    let checked = 0;
+    for (let trial = 0; trial < 150; trial++) {
+      const team = Array.from({ length: 7 }, (_, i) =>
+        rostered(i + 1, positions[Math.floor(random() * 3)], points(), { droppable: random() > 0.15 }),
+      );
+      const pool = Array.from({ length: 4 }, (_, i) => available(100 + i, positions[Math.floor(random() * 3)], points()));
+      const advice = waiverAdvice({ roster: team, available: pool, slots, weeks: threeWeeks, rosterSize: 7 });
+      const before = valueOf(team, threeWeeks);
+      for (const p of pool) {
+        const gains = team
+          .filter((d) => d.droppable)
+          .map((d) => valueOf([...team.filter((q) => q !== d), p], threeWeeks) - before)
+          .sort((a, b) => b - a);
+        const suggestion = advice.suggestions.find((s) => s.player.playerId === p.playerId);
+        if (!gains.length || gains[0] < MIN_GAIN) {
+          expect(suggestion).toBeUndefined();
+          continue;
+        }
+        checked++;
+        expect(suggestion?.gain).toBeCloseTo(gains[0], 9);
+        if (gains.length > 1) expect(suggestion?.alternative?.gain).toBeCloseTo(gains[1], 9);
+        else expect(suggestion?.alternative).toBeNull();
+        expect(valueOf([...team.filter((q) => q !== suggestion!.drop), p], threeWeeks) - before).toBeCloseTo(gains[0], 9);
+      }
+    }
+    expect(checked).toBeGreaterThan(100);
+  });
+});
+
 describe('forPosition', () => {
   const suggestions = Array.from({ length: 40 }, (_, i) => ({ player: available(i, i % 2 ? 'RB' : 'WR', [1]) }));
 
@@ -227,18 +273,16 @@ function player(overrides: Partial<Player>): Player {
 
 describe('droppable', () => {
   const starting = new Set(['QB', 'RB', 'WR', 'TE', 'K', 'D/ST']);
-  const before = new Date('2026-10-18T16:00:00Z');
 
-  it('lets a bench or starting player go before kickoff', () => {
-    expect(droppable(player({}), starting, before)).toBe(true);
-    expect(droppable(player({ slot: 'RB', starter: true }), starting, before)).toBe(true);
+  it('lets an unlocked bench or starting player go', () => {
+    expect(droppable(player({}), starting, false)).toBe(true);
+    expect(droppable(player({ slot: 'RB', starter: true }), starting, false)).toBe(true);
   });
 
   it('keeps IR, IDP and locked players', () => {
-    expect(droppable(player({ slot: 'IR' }), starting, before)).toBe(false);
-    expect(droppable(player({ position: 'LB' }), starting, before)).toBe(false);
-    expect(droppable(player({}), starting, new Date('2026-10-18T17:30:00Z'))).toBe(false);
-    expect(droppable(player({ gameState: 'in' }), starting, before)).toBe(false);
+    expect(droppable(player({ slot: 'IR' }), starting, false)).toBe(false);
+    expect(droppable(player({ position: 'LB' }), starting, false)).toBe(false);
+    expect(droppable(player({}), starting, true)).toBe(false);
   });
 });
 

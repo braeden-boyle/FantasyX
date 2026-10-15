@@ -1,6 +1,5 @@
 import { LineupSlot, NflGame, Player } from '../models/team.model';
-import { RosterValue, optimalLineup, rosterValue } from './lineup';
-import { isLocked } from './start-sit';
+import { RosterValue, optimalLineup } from './lineup';
 
 // Waiver advice for one roster: the free agents and waiver players worth claiming, each with the drop
 // that leaves the roster strongest. A move is valued as the roster's value (utils/lineup.ts) after it
@@ -66,9 +65,13 @@ export interface WaiverAdvice<R extends RosterEntry, A extends AvailableEntry> {
 
 // Whether a rostered player can be dropped now: not on IR (it frees no bench spot, and roster value
 // leaves them out, so they'd look free), at a position a starting slot takes (roster value can't
-// see the rest, e.g. IDP), and not locked.
-export function droppable(player: Player, startingPositions: ReadonlySet<string>, now: Date): boolean {
-  return player.slot !== 'IR' && startingPositions.has(player.position) && !isLocked(player, now);
+// see the rest, e.g. IDP), and not locked (start/sit's isLocked).
+export function droppable(
+  player: Pick<Player, 'slot' | 'position'>,
+  startingPositions: ReadonlySet<string>,
+  locked: boolean,
+): boolean {
+  return player.slot !== 'IR' && startingPositions.has(player.position) && !locked;
 }
 
 // Whether a pro team's game this week has kicked off, from the week's NFL games. False on a bye, or
@@ -88,20 +91,7 @@ export function weakestStarters(
   weeks: readonly number[],
   projectionFor: (player: WaiverPlayer, week: number) => number,
 ): Map<number, number> {
-  return new Map(
-    weeks.map((week) => {
-      const players = roster.map((p) => ({
-        playerId: p.playerId,
-        position: p.position,
-        projected: projectionFor(p, week),
-        slot: null,
-        locked: false,
-      }));
-      const starters = optimalLineup(players, slots).starters;
-      const weakest = starters.some((s) => !s.player) ? 0 : Math.min(...starters.map((s) => s.player!.projected));
-      return [week, weakest] as const;
-    }),
-  );
+  return new Map(weeks.map((week) => [week, weekLineup(roster, slots, week, projectionFor).weakest] as const));
 }
 
 // The prefilter: whether a pickup out-projects the weakest starter in some week. A drop only lowers
@@ -116,7 +106,15 @@ export function mightHelp(
   return [...weakest].some(([week, level]) => projectionFor(candidate, week) > level);
 }
 
-// The whole advice for a roster.
+// The whole advice for a roster. Each pickup's best drop is found without trying every one, using
+// two facts about best-lineup values:
+//   - a drop never raises the value, so no pickup gains more than it would with an open spot (its
+//     ceiling);
+//   - adding a player raises a week's best lineup by at most their projection, so a pickup gains at
+//     most its own projected points minus what the drop costs the roster today.
+// Drops are tried cheapest first, and the search stops once neither bound lets a later one beat the
+// top two. Dropping a player who isn't in a week's best lineup changes nothing that week, so only the
+// weeks they start in are solved again.
 export function waiverAdvice<R extends RosterEntry, A extends AvailableEntry>({
   roster,
   available,
@@ -129,13 +127,30 @@ export function waiverAdvice<R extends RosterEntry, A extends AvailableEntry>({
   const locked = new Set(available.filter((p) => p.locked).map((p) => p.playerId));
   const projectionFor = (p: WaiverPlayer, week: number) =>
     week === thisWeek && locked.has(p.playerId) ? 0 : (p.projections[week] ?? 0);
-  const valueOf = (players: readonly WaiverPlayer[]) => rosterValue(players, slots, weeks, projectionFor);
+  const lineupsOf = (players: readonly WaiverPlayer[]) => weeks.map((w) => weekLineup(players, slots, w, projectionFor));
 
   const active = roster.filter((p) => !p.injuredReserve);
   const openSpot = rosterSize > 0 && active.length < rosterSize;
-  const before = valueOf(active);
-  const weakest = weakestStarters(active, slots, weeks, projectionFor);
-  const drops = active.filter((p) => p.droppable);
+  const beforeLineups = lineupsOf(active);
+  const before: RosterValue = {
+    byWeek: new Map(weeks.map((w, i) => [w, beforeLineups[i].total] as const)),
+    total: sum(beforeLineups.map((l) => l.total)),
+  };
+  // The prefilter's levels, from the lineups already solved (weakestStarters, without solving again).
+  const weakest = new Map(weeks.map((w, i) => [w, beforeLineups[i].weakest] as const));
+
+  // What dropping each player costs the roster as it is, cheapest first; equal costs drop whoever
+  // is projected for less.
+  const drops = openSpot
+    ? []
+    : active
+        .filter((p) => p.droppable)
+        .map((p) => ({
+          player: p,
+          cost: before.total - sum(lineupsOf(active.filter((q) => q !== p)).map((l) => l.total)),
+          points: sum(weeks.map((w) => projectionFor(p, w))),
+        }))
+        .sort((a, b) => a.cost - b.cost || a.points - b.points || a.player.playerId - b.player.playerId);
 
   // ESPN's free-agent list can lag a move, so a player already rostered is never a pickup.
   const rostered = new Set(roster.map((p) => p.playerId));
@@ -143,21 +158,40 @@ export function waiverAdvice<R extends RosterEntry, A extends AvailableEntry>({
   const kept = pool.filter((p) => mightHelp(p, weakest, projectionFor));
   const suggestions: WaiverSuggestion<R, A>[] = [];
   for (const player of kept) {
-    // With an open spot nobody needs to go, and dropping someone never raises the value.
-    const options = (openSpot ? [null] : drops)
-      .map((drop) => ({ drop, value: valueOf([...active.filter((p) => p !== drop), player]) }))
-      .sort((a, b) => b.value.total - a.value.total || (a.drop?.playerId ?? 0) - (b.drop?.playerId ?? 0));
-    const [best, next] = options;
-    if (!best) continue;
-    const gain = best.value.total - before.total;
-    if (gain < MIN_GAIN) continue;
+    const added = [...active, player];
+    const withPickup = lineupsOf(added);
+    const ceiling = sum(withPickup.map((l) => l.total)) - before.total;
+    if (ceiling < MIN_GAIN) continue;
+    if (openSpot) {
+      suggestions.push({
+        player,
+        drop: null,
+        gain: ceiling,
+        weekGain: withPickup[0].total - beforeLineups[0].total,
+        startsIn: withPickup.filter((l) => l.starters.has(player.playerId)).length,
+        alternative: null,
+      });
+      continue;
+    }
+
+    const projected = sum(weeks.map((w) => projectionFor(player, w)));
+    let best: DropResult<R> | null = null;
+    let next: DropResult<R> | null = null;
+    for (const { player: drop, cost } of drops) {
+      // Drops come cheapest first, so this bound only falls; ties go to the earlier drop.
+      if (next && Math.min(ceiling, projected - cost) <= next.gain + EPSILON) break;
+      const result = dropResult(drop, player, added, withPickup, weeks, slots, projectionFor, before);
+      if (!best || result.gain > best.gain + EPSILON) [best, next] = [result, best];
+      else if (!next || result.gain > next.gain + EPSILON) next = result;
+    }
+    if (!best || best.gain < MIN_GAIN) continue;
     suggestions.push({
       player,
       drop: best.drop,
-      gain,
-      weekGain: (best.value.byWeek.get(thisWeek) ?? 0) - (before.byWeek.get(thisWeek) ?? 0),
-      startsIn: weeksStarted(player, [...active.filter((p) => p !== best.drop), player], slots, weeks, projectionFor),
-      alternative: next?.drop ? { drop: next.drop, gain: next.value.total - before.total } : null,
+      gain: best.gain,
+      weekGain: best.weekGain,
+      startsIn: best.startsIn,
+      alternative: next ? { drop: next.drop, gain: next.gain } : null,
     });
   }
 
@@ -165,27 +199,68 @@ export function waiverAdvice<R extends RosterEntry, A extends AvailableEntry>({
   return { before, openSpot, suggestions, evaluated: kept.length, skipped: pool.length - kept.length };
 }
 
+// Rounding in the solver's sums, far below any real difference in projections.
+const EPSILON = 1e-9;
+
+// One week's best lineup: its total, who starts, and its weakest starter (0 with a slot left empty).
+interface WeekLineup {
+  total: number;
+  starters: Set<number>;
+  weakest: number;
+}
+
+function weekLineup(
+  players: readonly WaiverPlayer[],
+  slots: readonly LineupSlot[],
+  week: number,
+  projectionFor: (player: WaiverPlayer, week: number) => number,
+): WeekLineup {
+  const lineup = optimalLineup(
+    players.map((p) => ({ playerId: p.playerId, position: p.position, projected: projectionFor(p, week), slot: null, locked: false })),
+    slots,
+  );
+  const seated = lineup.starters.flatMap((s) => (s.player ? [s.player] : []));
+  return {
+    total: lineup.total,
+    starters: new Set(seated.map((p) => p.playerId)),
+    weakest: seated.length < lineup.starters.length ? 0 : Math.min(...seated.map((p) => p.projected)),
+  };
+}
+
+interface DropResult<R> {
+  drop: R;
+  gain: number;
+  weekGain: number;
+  startsIn: number;
+}
+
+// A pickup with one drop: the roster value gained, this week's share, and how many weeks the pickup
+// starts in. withPickup is the best lineup each week with the pickup added and nobody dropped.
+function dropResult<R extends WaiverPlayer>(
+  drop: R,
+  pickup: WaiverPlayer,
+  added: readonly WaiverPlayer[],
+  withPickup: readonly WeekLineup[],
+  weeks: readonly number[],
+  slots: readonly LineupSlot[],
+  projectionFor: (player: WaiverPlayer, week: number) => number,
+  before: RosterValue,
+): DropResult<R> {
+  const remaining = added.filter((p) => p !== drop);
+  const after = weeks.map((w, i) =>
+    withPickup[i].starters.has(drop.playerId) ? weekLineup(remaining, slots, w, projectionFor) : withPickup[i],
+  );
+  return {
+    drop,
+    gain: sum(after.map((l) => l.total)) - before.total,
+    weekGain: after[0].total - (before.byWeek.get(weeks[0]) ?? 0),
+    startsIn: after.filter((l) => l.starters.has(pickup.playerId)).length,
+  };
+}
+
+const sum = (values: readonly number[]) => values.reduce((total, v) => total + v, 0);
+
 // The suggestions to show: all of them, or one position's, cut to MAX_SUGGESTIONS.
 export function forPosition<S extends { player: WaiverPlayer }>(suggestions: readonly S[], position: string | null): S[] {
   return suggestions.filter((s) => position === null || s.player.position === position).slice(0, MAX_SUGGESTIONS);
-}
-
-// How many weeks a player is in their roster's best lineup.
-function weeksStarted(
-  player: WaiverPlayer,
-  roster: readonly WaiverPlayer[],
-  slots: readonly LineupSlot[],
-  weeks: readonly number[],
-  projectionFor: (player: WaiverPlayer, week: number) => number,
-): number {
-  return weeks.filter((week) => {
-    const players = roster.map((p) => ({
-      playerId: p.playerId,
-      position: p.position,
-      projected: projectionFor(p, week),
-      slot: null,
-      locked: false,
-    }));
-    return optimalLineup(players, slots).starters.some((s) => s.player?.playerId === player.playerId);
-  }).length;
 }
