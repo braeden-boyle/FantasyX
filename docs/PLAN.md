@@ -1239,6 +1239,12 @@ Tell you which free agents and waiver players are worth claiming, and who to dro
   - Each card's ranking gain comes first, in the primary green, and the other moves to the small line under it. A week gain that rounds to nothing reads "Nothing this week" in grey.
   - In This Week mode the summary adds how many pickups gain anything this week ("· 4 this week" on the live league, all D/STs).
   - `WaiversService.horizon` keeps it for the session.
+- **Links from the Players page** (added 2026-10-15, at the user's request): an available player whose card the Waivers tab shows (filtered to their position, under the current ranking and drop settings) gets an add icon beside their FA/WA tag.
+  - Its tooltip reads, for example, "Suggested pickup: +1.2 this week, +16.2 rest of season, dropping Saints".
+  - It opens `/advice/waivers?position=D%2FST&player=…`, where the chip starts on that position and the player's card is highlighted and scrolled to. The click doesn't also open the row's drawer.
+  - Above the table, "62 available players would improve your roster … See waiver advice", hidden on the Rostered filter.
+  - The Players page builds the advice from the cached week (`WaiversService.ensureLoaded`), with no extra fetches. The waiver code moves to a chunk shared by the two lazy pages, so the initial bundle doesn't grow.
+  - On the live league, the Available filter's first page has 29 links. The kickers have none: with same-position drops, a kicker would have to replace the user's, and none beats him.
 - **`WaiversService`:**
   - Reuses `StartSitService`'s week, which the page force-loads on each visit, its one-minute lock clock (now exposed as `now`) and the week's `nflGames`.
   - The locked sets are computed once per tick and compare equal when nothing flipped, so the advice only reruns when a lock changes, not every minute.

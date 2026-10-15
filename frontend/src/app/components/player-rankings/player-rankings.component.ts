@@ -15,6 +15,7 @@ import { TeamStateService } from '../../services/team-state.service';
 import { LeagueOutlookService } from '../../services/league-outlook.service';
 import { PlayerRankingsService } from '../../services/player-rankings.service';
 import { ProjectionsService } from '../../services/projections.service';
+import { WaiversService } from '../../services/waivers.service';
 import { Player, Standing } from '../../models/team.model';
 import { REPLACEMENT_DEPTH, RankedPlayer, RankingHorizon } from '../../utils/player-rankings';
 import { matchupStars, shortStatus, signed, statusLabel, statusSeverity } from '../../utils/player-format';
@@ -89,9 +90,21 @@ export class PlayerRankingsComponent {
   private readonly outlook = inject(LeagueOutlookService);
   private readonly projections = inject(ProjectionsService);
   private readonly playerRankings = inject(PlayerRankingsService);
+  protected readonly waivers = inject(WaiversService);
 
   constructor() {
     this.playerRankings.ensureLoaded();
+    // For the links to waiver advice on the pickups it suggests. Built from the cached week.
+    this.waivers.ensureLoaded();
+  }
+
+  // The tooltip on a suggested pickup's link to waiver advice.
+  protected pickupTooltip(playerId: number): string {
+    const s = this.waivers.suggestionFor(playerId);
+    if (!s) return '';
+    const week = Math.abs(s.weekGain) < 0.05 ? 'nothing this week' : `${signed(s.weekGain)} this week`;
+    const drop = s.drop ? `, dropping ${s.drop.player.fullName}` : '';
+    return `Suggested pickup: ${week}, ${signed(s.gain)} rest of season${drop}. See waiver advice.`;
   }
 
   protected readonly status = this.playerRankings.status;

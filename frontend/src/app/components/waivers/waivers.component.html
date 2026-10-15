@@ -138,7 +138,11 @@
             </div>
 
             @for (s of suggestions(); track s.player.playerId; let i = $index) {
-              <div class="pickup-card">
+              <div
+                class="pickup-card"
+                [id]="'pickup-' + s.player.playerId"
+                [class.highlighted]="s.player.playerId === highlightId"
+              >
                 <div class="pickup-players">
                   <button type="button" class="pickup-player" (click)="openPlayer(s.player.player, i)">
                     <span class="pickup-verb text-green-600 dark:text-green-400">Add</span>

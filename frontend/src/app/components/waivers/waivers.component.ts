@@ -1,7 +1,7 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, computed, effect, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { ButtonModule } from 'primeng/button';
 import { MessageModule } from 'primeng/message';
 import { ProgressSpinnerModule } from 'primeng/progressspinner';
@@ -50,9 +50,22 @@ export class WaiversComponent {
   protected readonly teamState = inject(TeamStateService);
   protected readonly waivers = inject(WaiversService);
 
+  // A link from the Players page names a player's position and id: the chip starts on that position,
+  // and their card is picked out and scrolled to once it shows.
+  private readonly linked = inject(ActivatedRoute).snapshot.queryParamMap;
+  protected readonly highlightId = Number(this.linked.get('player')) || null;
+  private scrolledToHighlight = false;
+
   constructor() {
     // You may have just made a move on ESPN, so every visit refetches the week.
     this.waivers.load();
+    effect(() => {
+      const id = this.highlightId;
+      if (!id || this.scrolledToHighlight || !this.suggestions().some((s) => s.player.playerId === id)) return;
+      this.scrolledToHighlight = true;
+      // After the cards render.
+      setTimeout(() => document.getElementById(`pickup-${id}`)?.scrollIntoView({ block: 'center', behavior: 'smooth' }));
+    });
   }
 
   protected readonly advice = this.waivers.advice;
@@ -61,7 +74,7 @@ export class WaiversComponent {
   protected readonly statusSeverity = statusSeverity;
   protected readonly minGain = MIN_GAIN;
 
-  protected readonly position = signal(ALL);
+  protected readonly position = signal(this.linked.get('position') ?? ALL);
   protected readonly positionOptions = computed(() => [
     { label: 'All', value: ALL },
     ...(this.waivers.rankings()?.positions ?? []).map((p) => ({ label: p, value: p })),
@@ -74,8 +87,10 @@ export class WaiversComponent {
 
   protected readonly suggestions = computed(() => {
     const position = this.position();
+    // A linked position the league doesn't start reads as All.
+    const known = this.waivers.rankings()?.positions.includes(position) ?? false;
     const ranked = rankSuggestions(this.advice()?.suggestions ?? [], this.waivers.horizon());
-    return forPosition(ranked, position === ALL ? null : position);
+    return forPosition(ranked, known ? position : null);
   });
 
   // How many pickups gain anything this week, for the summary when ranking by this week.

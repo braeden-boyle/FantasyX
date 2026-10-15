@@ -7,7 +7,17 @@ import { TeamStateService } from './team-state.service';
 import { Player } from '../models/team.model';
 import { RankedPlayer, RankingHorizon } from '../utils/player-rankings';
 import { isLocked } from '../utils/start-sit';
-import { AvailableEntry, RosterEntry, WaiverAdvice, droppable, proTeamLocked, waiverAdvice } from '../utils/waivers';
+import {
+  AvailableEntry,
+  RosterEntry,
+  WaiverAdvice,
+  WaiverSuggestion,
+  droppable,
+  forPosition,
+  proTeamLocked,
+  rankSuggestions,
+  waiverAdvice,
+} from '../utils/waivers';
 
 // loading     - the week, league, rankings or projections are still loading
 // error       - the week failed to load (message in error)
@@ -37,8 +47,8 @@ export interface WaiverStanding {
 // Waiver advice for your own team (docs/PLAN.md, v1.13): the free agents and waiver players worth
 // claiming, each with the drop that leaves your roster strongest over the rest of the season. Your
 // roster comes from StartSitService's week, which the Advice page refetches on each visit, and the
-// pool and every player's weekly projections from the rest-of-season player rankings. Only the lazy
-// Waivers page injects it.
+// pool and every player's weekly projections from the rest-of-season player rankings. Only lazy pages
+// inject it: the Waivers tab, and the Players page for its links to it.
 @Injectable({ providedIn: 'root' })
 export class WaiversService {
   private readonly teamState = inject(TeamStateService);
@@ -51,6 +61,13 @@ export class WaiversService {
   // session cache. On each visit.
   load(): void {
     this.startSit.refresh();
+    this.rankingsService.ensureLoaded();
+  }
+
+  // Builds the advice from the cached week and rankings, if it isn't already (the Players page's
+  // links, which shouldn't refetch anything).
+  ensureLoaded(): void {
+    this.startSit.ensureLoaded();
     this.rankingsService.ensureLoaded();
   }
 
@@ -170,6 +187,24 @@ export class WaiversService {
       samePosition: this.samePosition(),
     });
   });
+
+  // Each pickup the Waivers tab shows when filtered to its position, by player id, under the current
+  // ranking and drop settings. Empty until the advice is ready.
+  private readonly shownByPlayer = computed(() => {
+    const suggestions = rankSuggestions(this.advice()?.suggestions ?? [], this.horizon());
+    const positions = new Set(suggestions.map((s) => s.player.position));
+    return new Map(
+      [...positions].flatMap((position) => forPosition(suggestions, position).map((s) => [s.player.playerId, s] as const)),
+    );
+  });
+
+  // A player's suggestion as the Waivers tab shows it, or undefined if it doesn't suggest them.
+  suggestionFor(playerId: number): WaiverSuggestion<WaiverRosterPlayer, WaiverPickup> | undefined {
+    return this.shownByPlayer().get(playerId);
+  }
+
+  // How many pickups would improve your roster, as the Waivers tab's summary counts them.
+  readonly suggestionCount = computed(() => this.advice()?.suggestions.length ?? 0);
 
   readonly standing = computed<WaiverStanding | null>(() => {
     const league = this.outlook.league();
