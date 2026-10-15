@@ -11,7 +11,15 @@ public record EspnLeagueResponse(
     EspnDraftDetail? DraftDetail);
 
 // Only populated when the "mSettings" view is requested.
-public record EspnSettings(string? Name, EspnScheduleSettings? ScheduleSettings, EspnRosterSettings? RosterSettings);
+public record EspnSettings(
+    string? Name,
+    EspnScheduleSettings? ScheduleSettings,
+    EspnRosterSettings? RosterSettings,
+    EspnAcquisitionSettings? AcquisitionSettings);
+
+// How the league adds players. ESPN sends AcquisitionBudget (100 by default) even when the league
+// doesn't use FAAB, so it only means anything with IsUsingAcquisitionBudget.
+public record EspnAcquisitionSettings(bool? IsUsingAcquisitionBudget, double? AcquisitionBudget);
 
 // Lineup slot counts, keyed by lineup slot id as a string (bench and IR included).
 public record EspnRosterSettings(Dictionary<string, int>? LineupSlotCounts);
@@ -44,7 +52,12 @@ public record EspnTeam(
     int? PlayoffSeed,
     string? Logo,
     List<string>? Owners,
-    int? DivisionId);
+    int? DivisionId,
+    int? WaiverRank,
+    EspnTransactionCounter? TransactionCounter);
+
+// A team's running transaction totals; only populated when the "mTeam" view is requested.
+public record EspnTransactionCounter(double? AcquisitionBudgetSpent);
 
 public record EspnRecord(EspnOverallRecord? Overall);
 

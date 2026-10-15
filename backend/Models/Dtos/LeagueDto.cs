@@ -5,7 +5,9 @@ namespace FantasyX.Backend.Models.Dtos;
 // in each matchup period, playoffs included (a playoff round can span two). RegularSeasonMatchupPeriods and PlayoffTeamCount
 // are 0 when ESPN doesn't send them. PlayoffSeedingRule is ESPN's tiebreaker name, e.g.
 // "TOTAL_POINTS_SCORED" or "H2H_RECORD". LineupSlots are the starting slots (bench, IR and IDP left
-// out), for the best-lineup fills behind power rankings and player rankings.
+// out), for the best-lineup fills behind power rankings and player rankings. RosterSize is how many
+// players a roster holds outside IR (starters, bench and IDP), 0 when ESPN doesn't send the slots.
+// Acquisition is null when ESPN doesn't send the league's acquisition settings.
 public record LeagueDto(
     string LeagueName,
     int CurrentMatchupPeriod,
@@ -16,9 +18,16 @@ public record LeagueDto(
     int PlayoffTeamCount,
     string? PlayoffSeedingRule,
     IReadOnlyList<ScheduledMatchupDto> Schedule,
-    IReadOnlyList<LineupSlotDto> LineupSlots);
+    IReadOnlyList<LineupSlotDto> LineupSlots,
+    int RosterSize,
+    AcquisitionDto? Acquisition);
 
-// Streak is compact, e.g. "W3" or "L1"; null when ESPN has no streak yet.
+// UsesBudget is true in a FAAB league, where Budget is each team's season budget.
+public record AcquisitionDto(bool UsesBudget, int Budget);
+
+// Streak is compact, e.g. "W3" or "L1"; null when ESPN has no streak yet. WaiverRank is the team's
+// waiver priority (1 claims first) and BudgetSpent its FAAB spent this season, null when ESPN
+// doesn't send them.
 public record StandingDto(
     int TeamId,
     int Seed,
@@ -32,7 +41,9 @@ public record StandingDto(
     double PointsFor,
     double PointsAgainst,
     string? Streak,
-    int DivisionId);
+    int DivisionId,
+    int? WaiverRank,
+    int? BudgetSpent);
 
 public record MatchupDto(MatchupSideDto Home, MatchupSideDto Away);
 

@@ -1120,13 +1120,26 @@ Tell you which free agents and waiver players are worth claiming, and who to dro
 - **Projections** follow the ESPN / FantasyX setting, with the "FantasyX projections" tag (v1.7).
 - **Not done:** making claims on ESPN (the app stays read-only), FAAB bid suggestions, two-for-one moves (add two, drop two), and when a waiver claim clears (the this-week gain assumes it clears before the player's game).
 
+## Spike (2026-10-15)
+
+- **League settings** (`mSettings`, on `leaguedefaults/3`, then on the real league):
+  - `settings.acquisitionSettings` has `isUsingAcquisitionBudget` and `acquisitionBudget`, plus `acquisitionType` ("WAIVERS_TRADITIONAL"), `waiverHours`, `waiverProcessDays` and `minimumBid`.
+  - `acquisitionBudget` is 100 even when `isUsingAcquisitionBudget` is false. The budget only means anything with the flag on.
+  - `rosterSettings.lineupSlotCounts` covers bench (20) and IR (21) too. Every slot but IR sums to the roster size: 16 on the defaults (9 starters, 7 bench).
+- **Teams** (`mTeam`, real league only, since `leaguedefaults` has none):
+  - `waiverRank` is there on every team, 1 to 14 with no repeats.
+  - `transactionCounter.acquisitionBudgetSpent` is there too. It's 0 on every team in this non-FAAB league.
+- **The real league:** a roster size of 14 (9 starters, 5 bench). The user's team has 14 players off IR and 1 on it, so it's full and IR doesn't count. Waiver priority 9th of 14. Not FAAB.
+- **How it was read:** from the app's own tab, through a backend built from this branch on port 8081, so the league's cookies never left the page.
+- **Still to see:** a FAAB league, with a real budget spent.
+
 ## Backend
 
 - **`LeagueDto`** (`POST /api/espn/league`, already fetched with `mTeam` and `mSettings`) gains:
   - `RosterSize`: the sum of `rosterSettings.lineupSlotCounts` over every slot but IR (21), bench and IDP included. You have an open spot when your players off IR number fewer than this.
   - `Acquisition`: `{ UsesBudget, Budget }`, from `settings.acquisitionSettings` (`isUsingAcquisitionBudget`, `acquisitionBudget`). Null when ESPN doesn't send it.
 - **`StandingDto`** gains `WaiverRank` (the team's `waiverRank`) and `BudgetSpent` (`transactionCounter.acquisitionBudgetSpent`), both nullable.
-- **Spike first:** confirm those four ESPN field names on the live league's raw response before modelling them, the way v1.11 checked the scoreboard.
+- **Spike first:** confirm those four ESPN field names on the live league's raw response before modelling them, the way v1.11 checked the scoreboard. Done; see Spike above.
 - Nothing else. `POST /api/espn/available-players` already returns each player's status, weekly history and upcoming projections.
 
 ## Frontend
