@@ -1,5 +1,5 @@
 import { LineupSlot, NflGame, Player } from '../models/team.model';
-import { RosterValue, optimalLineup } from './lineup';
+import { RosterValue, WeekLineup, weekLineup } from './lineup';
 import { RankingHorizon } from './player-rankings';
 
 // Waiver advice for one roster: the free agents and waiver players worth claiming, each with the drop
@@ -206,31 +206,6 @@ export function waiverAdvice<R extends RosterEntry, A extends AvailableEntry>({
 
 // Rounding in the solver's sums, far below any real difference in projections.
 const EPSILON = 1e-9;
-
-// One week's best lineup: its total, who starts, and its weakest starter (0 with a slot left empty).
-interface WeekLineup {
-  total: number;
-  starters: Set<number>;
-  weakest: number;
-}
-
-function weekLineup(
-  players: readonly WaiverPlayer[],
-  slots: readonly LineupSlot[],
-  week: number,
-  projectionFor: (player: WaiverPlayer, week: number) => number,
-): WeekLineup {
-  const lineup = optimalLineup(
-    players.map((p) => ({ playerId: p.playerId, position: p.position, projected: projectionFor(p, week), slot: null, locked: false })),
-    slots,
-  );
-  const seated = lineup.starters.flatMap((s) => (s.player ? [s.player] : []));
-  return {
-    total: lineup.total,
-    starters: new Set(seated.map((p) => p.playerId)),
-    weakest: seated.length < lineup.starters.length ? 0 : Math.min(...seated.map((p) => p.projected)),
-  };
-}
 
 interface DropResult<R> {
   drop: R;

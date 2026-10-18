@@ -126,6 +126,33 @@ export function rosterValue<P extends { playerId: number; position: string; slot
   return { byWeek, total: [...byWeek.values()].reduce((sum, v) => sum + v, 0) };
 }
 
+// One week's best lineup, with no lineup set and nobody locked: its total, who starts, and its
+// weakest starter (0 with a slot left empty). Waivers and trades build roster values from these, so
+// they can tell which weeks a change touches.
+export interface WeekLineup {
+  total: number;
+  starters: Set<number>;
+  weakest: number;
+}
+
+export function weekLineup<P extends { playerId: number; position: string }>(
+  players: readonly P[],
+  slots: readonly LineupSlot[],
+  week: number,
+  projectionFor: (player: P, week: number) => number,
+): WeekLineup {
+  const lineup = optimalLineup(
+    players.map((p) => ({ playerId: p.playerId, position: p.position, projected: projectionFor(p, week), slot: null, locked: false })),
+    slots,
+  );
+  const seated = lineup.starters.flatMap((s) => (s.player ? [s.player] : []));
+  return {
+    total: lineup.total,
+    starters: new Set(seated.map((p) => p.playerId)),
+    weakest: seated.length < lineup.starters.length ? 0 : Math.min(...seated.map((p) => p.projected)),
+  };
+}
+
 // The Hungarian algorithm (Kuhn-Munkres): the column assigned to each row that minimises the total
 // cost, for a matrix with no more rows than columns. O(rows^2 x columns), which is nothing at
 // lineup sizes.
