@@ -5,21 +5,22 @@ import { EspnApiService } from './espn-api.service';
 import { ProjectionsService } from './projections.service';
 import { TeamStateService } from './team-state.service';
 import { WeekMatchupsService } from './week-matchups.service';
-import { Draft, ImportTeamRequest, League, MatchupTeam, WeekMatchups } from '../models/team.model';
+import { Draft, ImportTeamRequest, League, MatchupTeam, Player, WeekMatchups } from '../models/team.model';
 import {
   PowerRank,
   RESULTS_WEIGHT_GAMES,
   bestLineupTotal,
   completedScores,
+  periodStrengthsOf,
   powerRankings,
   powerScores,
   rankByStrength,
   remainingScheduleStrength,
   rosterStrength,
   teamStrength,
+  teamWeeklyStrengths,
 } from '../utils/power-rankings';
-import { OddsInput, PlayoffOdds, TeamOdds, playoffOdds, weeklySpread } from '../utils/playoff-odds';
-import { rosterValue } from '../utils/lineup';
+import { OddsInput, PlayoffOdds, TeamOdds, playoffOdds, weeklySpread, withPeriodStrengths } from '../utils/playoff-odds';
 
 interface LeagueLoad {
   league: League | null;
@@ -289,27 +290,16 @@ export class LeagueOutlookService {
 
     const { scoringPeriod } = week.week;
     const lastWeek = Math.max(scoringPeriod, ...Object.values(league.scoringPeriodsByMatchupPeriod).flat());
-    const slots = league.lineupSlots;
     const scores = completedScores(league.schedule, this.completedBefore());
-    const projectionOf = this.projections.projectionOf();
+    const thisWeek = { week: scoringPeriod, projectionOf: this.projections.projectionOf() };
+    const weeks = Array.from({ length: lastWeek - scoringPeriod + 1 }, (_, i) => scoringPeriod + i);
 
-    const laterWeeks = Array.from({ length: lastWeek - scoringPeriod }, (_, i) => scoringPeriod + 1 + i);
-
-    const strengths = new Map<number, Map<number, number>>();
-    for (const { team } of week.week.teams) {
-      const later = slots.length ? rosterValue(team.players, slots, laterWeeks, future).byWeek : null;
-      const byWeek = new Map<number, number>();
-      for (let s = scoringPeriod; s <= lastWeek; s++) {
-        const roster =
-          s === scoringPeriod ? rosterStrength(team.players, projectionOf)
-          : later ? later.get(s)!
-          : rosterStrength(team.players, (p) => future(p, s));
-        const parts = teamStrength(scores.get(team.teamId) ?? [], roster);
-        if (parts) byWeek.set(s, parts.strength);
-      }
-      strengths.set(team.teamId, byWeek);
-    }
-    return strengths;
+    return new Map(
+      week.week.teams.map(({ team }) => [
+        team.teamId,
+        teamWeeklyStrengths(team.players, scores.get(team.teamId) ?? [], weeks, league.lineupSlots, future, thisWeek),
+      ] as const),
+    );
   });
 
   // Each team's strength in each matchup period still to play: the average over its NFL weeks.
@@ -317,16 +307,9 @@ export class LeagueOutlookService {
     const league = this.league();
     const weekly = this.weeklyStrengths();
     if (!league || !weekly) return null;
-    const result = new Map<number, Record<number, number>>();
-    for (const [teamId, byWeek] of weekly) {
-      const byPeriod: Record<number, number> = {};
-      for (const [period, weeks] of Object.entries(league.scoringPeriodsByMatchupPeriod)) {
-        const values = weeks.map((w) => byWeek.get(w)).filter((v): v is number => v !== undefined);
-        if (values.length) byPeriod[Number(period)] = values.reduce((a, b) => a + b, 0) / values.length;
-      }
-      result.set(teamId, byPeriod);
-    }
-    return result;
+    return new Map(
+      [...weekly].map(([teamId, byWeek]) => [teamId, periodStrengthsOf(byWeek, league.scoringPeriodsByMatchupPeriod)] as const),
+    );
   });
 
   readonly restOfSeason = computed<RestOfSeasonView | null>(() => {
@@ -440,6 +423,30 @@ export class LeagueOutlookService {
 
   oddsOf(teamId: number): TeamOdds | undefined {
     return this.oddsById().get(teamId);
+  }
+
+  // The playoff odds with some teams' rosters changed from fromWeek on (a trade's, after drops): the
+  // same input as odds(), seed included, with those teams' strengths in those weeks rebuilt from the
+  // given players, so the difference is the rosters and not simulation noise. Null when there are no
+  // odds to rerun: they're still loading, the regular season is over, or upcoming projections failed.
+  oddsAfter(rosters: ReadonlyMap<number, readonly Player[]>, fromWeek: number): Observable<PlayoffOdds | null> {
+    const league = this.league();
+    const input = this.oddsInput();
+    const weekly = this.weeklyStrengths();
+    const future = this.projections.futureProjectionOf();
+    if (!league || !input || !weekly || !future) return of(null);
+
+    const scores = completedScores(league.schedule, this.completedBefore());
+    const byPeriod = new Map<number, Record<number, number>>();
+    for (const [teamId, players] of rosters) {
+      const original = weekly.get(teamId);
+      if (!original) continue;
+      const later = [...original.keys()].filter((w) => w >= fromWeek);
+      const rebuilt = teamWeeklyStrengths(players, scores.get(teamId) ?? [], later, league.lineupSlots, future, null);
+      const merged = new Map([...original].map(([w, s]) => [w, rebuilt.get(w) ?? s] as const));
+      byPeriod.set(teamId, periodStrengthsOf(merged, league.scoringPeriodsByMatchupPeriod));
+    }
+    return runPlayoffOdds(withPeriodStrengths(input, byPeriod));
   }
 }
 

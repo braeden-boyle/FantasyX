@@ -89,6 +89,18 @@ export interface OddsInput {
   seed?: number;
 }
 
+// The same input with some teams' strengths in each remaining period replaced (a trade's rosters),
+// everything else, the seed included, as it was.
+export function withPeriodStrengths(
+  input: OddsInput,
+  byPeriod: ReadonlyMap<number, Readonly<Record<number, number>>>,
+): OddsInput {
+  return {
+    ...input,
+    teams: input.teams.map((t) => (byPeriod.has(t.teamId) ? { ...t, byPeriod: byPeriod.get(t.teamId) } : t)),
+  };
+}
+
 export type OddsTag = 'x' | 'y' | 'e';
 
 // bye is null in a league without byes. The clinched/eliminated flags are exact (never set before

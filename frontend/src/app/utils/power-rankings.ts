@@ -1,4 +1,5 @@
-import { Player, ScheduledMatchup } from '../models/team.model';
+import { LineupSlot, Player, ScheduledMatchup } from '../models/team.model';
+import { rosterValue } from './lineup';
 
 // Power rankings order teams by one strength figure, an expected weekly score, that blends how a
 // team has scored with what its roster is projected to score now:
@@ -69,6 +70,46 @@ export function teamStrength(scores: readonly number[], roster: number | null): 
   if (roster === null) return results === null ? null : { strength: results, results, roster, resultsWeight: 1 };
   const w = n / (n + RESULTS_WEIGHT_GAMES);
   return { strength: w * (results ?? 0) + (1 - w) * roster, results, roster, resultsWeight: w };
+}
+
+// A team's strength in each of the weeks (NFL weeks), from its completed scores blended with that
+// week's roster projection. This week (thisWeek, when it's one of them) uses the set lineup; later
+// weeks the best lineup the roster (IR aside) can field that week, since lineups get reset, so byes
+// count in the week they fall. Without lineup settings, later weeks use the set lineup too.
+export function teamWeeklyStrengths(
+  players: readonly Player[],
+  scores: readonly number[],
+  weeks: readonly number[],
+  slots: readonly LineupSlot[],
+  futureProjectionOf: (player: Player, week: number) => number,
+  thisWeek: { week: number; projectionOf: StrengthProjectionOf } | null,
+): Map<number, number> {
+  const later = weeks.filter((w) => w !== thisWeek?.week);
+  const best = slots.length ? rosterValue(players, slots, later, futureProjectionOf).byWeek : null;
+  const byWeek = new Map<number, number>();
+  for (const w of weeks) {
+    const roster =
+      thisWeek && w === thisWeek.week ? rosterStrength(players, thisWeek.projectionOf)
+      : best ? best.get(w)!
+      : rosterStrength(players, (p) => futureProjectionOf(p, w));
+    const parts = teamStrength(scores, roster);
+    if (parts) byWeek.set(w, parts.strength);
+  }
+  return byWeek;
+}
+
+// A team's strength in each matchup period: the average over the period's NFL weeks that have one.
+// Periods with none are left out.
+export function periodStrengthsOf(
+  byWeek: ReadonlyMap<number, number>,
+  scoringPeriodsByMatchupPeriod: Readonly<Record<string, readonly number[]>>,
+): Record<number, number> {
+  const byPeriod: Record<number, number> = {};
+  for (const [period, weeks] of Object.entries(scoringPeriodsByMatchupPeriod)) {
+    const values = weeks.map((w) => byWeek.get(w)).filter((v): v is number => v !== undefined);
+    if (values.length) byPeriod[Number(period)] = values.reduce((a, b) => a + b, 0) / values.length;
+  }
+  return byPeriod;
 }
 
 // The average strength of each team's remaining regular-season opponents (matchup periods from
