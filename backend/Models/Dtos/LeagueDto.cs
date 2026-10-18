@@ -7,7 +7,9 @@ namespace FantasyX.Backend.Models.Dtos;
 // "TOTAL_POINTS_SCORED" or "H2H_RECORD". LineupSlots are the starting slots (bench, IR and IDP left
 // out), for the best-lineup fills behind power rankings and player rankings. RosterSize is how many
 // players a roster holds outside IR (starters, bench and IDP), 0 when ESPN doesn't send the slots.
-// Acquisition is null when ESPN doesn't send the league's acquisition settings.
+// Acquisition is null when ESPN doesn't send the league's acquisition settings. IrSlots is how many
+// IR slots a roster has (0 when ESPN doesn't say). TradeDeadline is when trades close, null when
+// ESPN doesn't send one.
 public record LeagueDto(
     string LeagueName,
     int CurrentMatchupPeriod,
@@ -20,7 +22,9 @@ public record LeagueDto(
     IReadOnlyList<ScheduledMatchupDto> Schedule,
     IReadOnlyList<LineupSlotDto> LineupSlots,
     int RosterSize,
-    AcquisitionDto? Acquisition);
+    AcquisitionDto? Acquisition,
+    int IrSlots,
+    DateTimeOffset? TradeDeadline);
 
 // UsesBudget is true in a FAAB league, where Budget is each team's season budget.
 public record AcquisitionDto(bool UsesBudget, int Budget);

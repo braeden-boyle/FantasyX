@@ -94,8 +94,22 @@ public class EspnFantasyService : IEspnFantasyService
             schedule,
             StartingLineupSlots(league),
             RosterSize(league),
-            Acquisition(league));
+            Acquisition(league),
+            IrSlots(league),
+            TradeDeadline(league));
     }
+
+    // How many IR slots a roster has, from mSettings' slot counts; 0 when ESPN doesn't send them.
+    private static int IrSlots(EspnLeagueResponse league) =>
+        (league.Settings?.RosterSettings?.LineupSlotCounts ?? [])
+            .Where(entry => int.TryParse(entry.Key, out var id) && EspnLookups.IsInjuredReserve(id))
+            .Sum(entry => Math.Max(0, entry.Value));
+
+    // The trade deadline, or null when ESPN doesn't send one (or sends 0).
+    private static DateTimeOffset? TradeDeadline(EspnLeagueResponse league) =>
+        league.Settings?.TradeSettings?.DeadlineDate is double ms && ms > 0
+            ? DateTimeOffset.FromUnixTimeMilliseconds((long)Math.Round(ms))
+            : null;
 
     // How many players a roster holds outside IR, from mSettings' slot counts.
     private static int RosterSize(EspnLeagueResponse league) =>
