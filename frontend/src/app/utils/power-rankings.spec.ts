@@ -4,13 +4,16 @@ import {
   RESULTS_WEIGHT_GAMES,
   bestLineupTotal,
   completedScores,
+  periodStrengthsOf,
   powerRankings,
   powerScores,
   rankByStrength,
   remainingScheduleStrength,
   rosterStrength,
   teamStrength,
+  teamWeeklyStrengths,
 } from './power-rankings';
+import { OddsInput, playoffOdds, withPeriodStrengths } from './playoff-odds';
 
 function player(overrides: Partial<Player> = {}): Player {
   return {
@@ -155,5 +158,100 @@ describe('bestLineupTotal', () => {
 
   it('leaves a slot empty when nobody can fill it', () => {
     expect(bestLineupTotal([pick(1, 'QB', 20), pick(2, 'K', 8)], slots)).toBe(20);
+  });
+});
+
+describe('teamWeeklyStrengths', () => {
+  const slots = [{ slot: 'RB', count: 1, eligiblePositions: ['RB'] }];
+  // A starting RB projected 10 this week and on bye in week 2, and a bench RB projected 6 every week.
+  const players = [
+    player({ playerId: 1, position: 'RB', slot: 'RB', projectedPoints: 10 }),
+    player({ playerId: 2, position: 'RB', slot: 'BE', starter: false, projectedPoints: 6 }),
+  ];
+  const future = (p: Player, week: number) => (p.playerId === 1 && week === 2 ? 0 : p.projectedPoints);
+
+  it('uses the set lineup this week and the best lineup later', () => {
+    const thisWeek = { week: 1, projectionOf: (p: Player) => (p.playerId === 1 ? 4 : 6) };
+    // This week the set starter (4) plays, though the bench RB would score more; in week 2 the bench
+    // RB covers the bye.
+    expect(teamWeeklyStrengths(players, [], [1, 2, 3], slots, future, thisWeek)).toEqual(new Map([[1, 4], [2, 6], [3, 10]]));
+    expect(teamWeeklyStrengths(players, [], [2, 3], slots, future, null)).toEqual(new Map([[2, 6], [3, 10]]));
+  });
+
+  it('blends in results', () => {
+    const scores = [100, 100, 100, 100];
+    expect(teamWeeklyStrengths(players, scores, [3], slots, future, null).get(3)).toBe(0.5 * 100 + 0.5 * 10);
+  });
+
+  it('averages each matchup period over its weeks', () => {
+    const byWeek = new Map([[1, 90], [2, 100], [3, 110]]);
+    expect(periodStrengthsOf(byWeek, { '1': [1], '2': [2, 3], '3': [4] })).toEqual({ 1: 90, 2: 105 });
+  });
+});
+
+describe('playoff odds after a roster change', () => {
+  const slots = [{ slot: 'RB', count: 1, eligiblePositions: ['RB'] }];
+  const periods = [1, 2, 3, 4, 5, 6];
+  const scoringPeriods = Object.fromEntries(periods.map((p) => [String(p), [p]]));
+  const future = (p: Player) => p.projectedPoints;
+  // Four teams of one RB each, meeting each other twice over six weeks, none played yet.
+  const rb = (playerId: number, projectedPoints: number) => player({ playerId, position: 'RB', slot: 'RB', projectedPoints });
+  const rosters = new Map([[1, [rb(1, 95)]], [2, [rb(2, 105)]], [3, [rb(3, 100)]], [4, [rb(4, 100)]]]);
+  const pairs = [[1, 4, 2, 3], [1, 3, 4, 2], [1, 2, 3, 4]];
+  const schedule = periods.flatMap((period) => {
+    const [a, b, c, d] = pairs[(period - 1) % 3];
+    const upcoming = (home: number, away: number): ScheduledMatchup => ({
+      matchupPeriod: period, homeTeamId: home, awayTeamId: away, homePoints: 0, awayPoints: 0, winner: 'UNDECIDED',
+    });
+    return [upcoming(a, b), upcoming(c, d)];
+  });
+
+  const weekly = new Map(
+    [...rosters].map(([teamId, players]) => [
+      teamId,
+      teamWeeklyStrengths(players, [], periods, slots, future, { week: 1, projectionOf: future }),
+    ] as const),
+  );
+  const input: OddsInput = {
+    teams: [...weekly].map(([teamId, byWeek]) => ({
+      teamId,
+      divisionId: 0,
+      strength: byWeek.get(1)!,
+      byPeriod: periodStrengthsOf(byWeek, scoringPeriods),
+    })),
+    schedule,
+    currentPeriod: 1,
+    regularSeasonPeriods: 6,
+    playoffTeamCount: 2,
+    seedingRule: null,
+    spread: 20,
+    simulations: 2000,
+  };
+
+  // What LeagueOutlookService.oddsAfter does: the teams' strengths from fromWeek on rebuilt from the
+  // given rosters, the rest kept.
+  const after = (changed: Map<number, Player[]>, fromWeek: number) => {
+    const byPeriod = new Map(
+      [...changed].map(([teamId, players]) => {
+        const original = weekly.get(teamId)!;
+        const rebuilt = teamWeeklyStrengths(players, [], periods.filter((w) => w >= fromWeek), slots, future, null);
+        const merged = new Map([...original].map(([w, s]) => [w, rebuilt.get(w) ?? s] as const));
+        return [teamId, periodStrengthsOf(merged, scoringPeriods)] as const;
+      }),
+    );
+    return playoffOdds(withPeriodStrengths(input, byPeriod))!;
+  };
+  const playoff = (odds: ReturnType<typeof after>, teamId: number) => odds.teams.find((t) => t.teamId === teamId)!.playoff;
+
+  it('gives exactly the same odds with the rosters unchanged', () => {
+    expect(after(rosters, 2)).toEqual(playoffOdds(input));
+  });
+
+  it('moves the odds the way the rosters do', () => {
+    // Teams 1 and 2 swap RBs from week 2: 1 gets stronger, 2 weaker.
+    const before = playoffOdds(input)!;
+    const swapped = after(new Map([[1, [rb(2, 105)]], [2, [rb(1, 95)]]]), 2);
+    expect(playoff(swapped, 1)).toBeGreaterThan(playoff(before, 1));
+    expect(playoff(swapped, 2)).toBeLessThan(playoff(before, 2));
   });
 });

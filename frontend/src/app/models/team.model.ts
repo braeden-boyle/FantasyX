@@ -89,7 +89,9 @@ export interface ScheduledMatchup {
 // string, playoffs included (a playoff round can span two weeks).
 // regularSeasonMatchupPeriods and playoffTeamCount are 0 when ESPN doesn't send them.
 // lineupSlots are the starting slots (bench, IR and IDP left out). rosterSize is how many players a
-// roster holds outside IR (0 when unknown); acquisition is null when ESPN doesn't send it.
+// roster holds outside IR (0 when unknown); acquisition is null when ESPN doesn't send it. irSlots is
+// how many IR slots a roster has (0 when unknown); tradeDeadline is when trades close (ISO), null
+// when ESPN doesn't send one.
 export interface League {
   leagueName: string;
   currentMatchupPeriod: number;
@@ -103,6 +105,8 @@ export interface League {
   lineupSlots: LineupSlot[];
   rosterSize: number;
   acquisition: Acquisition | null;
+  irSlots: number;
+  tradeDeadline: string | null;
 }
 
 // How the league adds players: usesBudget in a FAAB league, where budget is each team's season

@@ -1,0 +1,389 @@
+@if (!teamState.importRequest()) {
+  <div class="max-w-xl mx-auto mt-10 p-4 text-center text-surface-500">
+    No team imported yet. <a routerLink="/import" class="text-primary-600 underline">Go import one</a>.
+  </div>
+} @else {
+  <div class="max-w-4xl mx-auto mt-6 p-4 flex flex-col gap-6">
+    <div class="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
+      <div class="flex flex-col gap-2">
+        <h1 class="text-2xl font-semibold whitespace-nowrap">
+          Trades
+          @if (trades.scoringPeriod(); as week) {
+            <span class="text-surface-500 font-normal">· Week {{ week }}</span>
+          }
+        </h1>
+        <app-projection-source />
+      </div>
+      <p-button
+        label="Refresh"
+        class="whitespace-nowrap"
+        icon="pi pi-refresh"
+        [text]="true"
+        size="small"
+        [loading]="trades.refreshing()"
+        (onClick)="trades.refresh()"
+      />
+    </div>
+
+    @switch (trades.status()) {
+      @case ('error') {
+        <div class="flex flex-col items-start gap-3">
+          <p-message severity="error" [text]="trades.error() ?? ''" class="w-full" />
+          <p-button label="Retry" icon="pi pi-refresh" size="small" (onClick)="trades.retry()" />
+        </div>
+      }
+      @case ('unavailable') {
+        <div class="flex flex-col items-start gap-3">
+          <p-message
+            severity="warn"
+            text="Trade analysis is unavailable: the league's settings or projections couldn't be loaded."
+            class="w-full"
+          />
+          <p-button label="Retry" icon="pi pi-refresh" size="small" (onClick)="trades.retry()" />
+        </div>
+      }
+      @case ('over') {
+        <p-message severity="info" text="There's no week left for a trade to count in." />
+      }
+      @case ('ready') {
+        @if (trades.deadlinePassed()) {
+          <p-message
+            severity="info"
+            [text]="'Trades closed on ' + deadlineText() + '. The analysis still works.'"
+            styleClass="w-full"
+          />
+        }
+
+        <!-- The builder: the team to trade with, then players each way. -->
+        <section class="flex flex-col gap-4">
+          <div class="flex flex-wrap items-center gap-3">
+            <label for="trade-partner" class="text-sm font-medium">Trade with</label>
+            <p-select
+              inputId="trade-partner"
+              [options]="partnerOptions()"
+              [ngModel]="partnerId()"
+              (ngModelChange)="setPartner($event)"
+              optionLabel="name"
+              optionValue="teamId"
+              placeholder="Pick a team"
+              styleClass="partner-select"
+            >
+              <ng-template #selectedItem let-t>
+                <span class="flex items-center gap-2 min-w-0">
+                  <app-team-logo [logoUrl]="t.logoUrl" [abbrev]="t.abbrev" />
+                  <span class="truncate">{{ t.name }}</span>
+                  <span class="text-surface-500 text-sm tabular-nums">{{ t.record }}</span>
+                </span>
+              </ng-template>
+              <ng-template #item let-t>
+                <span class="flex items-center gap-2 min-w-0">
+                  <app-team-logo [logoUrl]="t.logoUrl" [abbrev]="t.abbrev" />
+                  <span class="truncate">{{ t.name }}</span>
+                  <span class="text-surface-500 text-sm tabular-nums">{{ t.record }}</span>
+                </span>
+              </ng-template>
+            </p-select>
+          </div>
+
+          @if (missingText(); as text) {
+            <p-message severity="warn" [text]="text" styleClass="w-full" />
+          }
+
+          @if (!trades.partner()) {
+            <p class="text-surface-500">Pick a team to trade with.</p>
+          } @else {
+            @if (picked().send.length || picked().get.length) {
+              <div class="flex flex-wrap items-center gap-2" aria-label="Players picked">
+                <!-- Plain buttons rather than p-chip, which would move PrimeNG's chip into a chunk the
+                     initial bundle shares with this page. -->
+                @for (pick of [{ side: 'send', verb: 'Send', players: picked().send }, { side: 'get', verb: 'Get', players: picked().get }]; track pick.side) {
+                  @for (p of pick.players; track p.playerId) {
+                    <button
+                      type="button"
+                      class="pick-chip"
+                      [attr.aria-label]="'Remove ' + p.player.fullName + ' from the trade'"
+                      (click)="remove($any(pick.side), p.playerId)"
+                    >
+                      <span class="text-surface-500">{{ pick.verb }}</span>
+                      <span class="truncate">{{ p.player.fullName }}</span>
+                      <i class="pi pi-times-circle text-xs"></i>
+                    </button>
+                  }
+                }
+                <p-button label="Clear" icon="pi pi-times" [text]="true" size="small" (onClick)="clear()" />
+              </div>
+            }
+
+            <div class="rosters">
+              <ng-container
+                *ngTemplateOutlet="rosterList; context: { $implicit: myRoster(), side: 'send', title: 'You send' }"
+              />
+              <ng-container
+                *ngTemplateOutlet="
+                  rosterList;
+                  context: { $implicit: partnerRoster(), side: 'get', title: 'You get', team: partnerName() }
+                "
+              />
+            </div>
+          }
+        </section>
+
+        @if (trades.partner() && !analysis()) {
+          <p class="text-surface-500">Pick players on both sides.</p>
+        }
+
+        @if (analysis(); as a) {
+          <!-- Summary: the read on both sides, and what each would have to drop. -->
+          <section class="summary-card" aria-live="polite">
+            <p class="text-lg font-medium">{{ a.label }}</p>
+            <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <span class="flex items-center gap-1">
+                You <span class="font-medium tabular-nums" [ngClass]="gainClass(a.you.gain)">{{ signed(a.you.gain) }}</span>
+                <p-tag [value]="outcomeLabels[a.you.outcome]" [severity]="outcomeSeverity(a.you.outcome)" styleClass="!text-xs" />
+              </span>
+              <span class="text-surface-400">·</span>
+              <span class="flex items-center gap-1">
+                Them <span class="font-medium tabular-nums" [ngClass]="gainClass(a.them.gain)">{{ signed(a.them.gain) }}</span>
+                <p-tag [value]="outcomeLabels[a.them.outcome]" [severity]="outcomeSeverity(a.them.outcome)" styleClass="!text-xs" />
+              </span>
+              <span
+                class="text-sm text-surface-500"
+                pTooltip="Gains are the change in each side's best lineup each week, added up from next week through the fantasy playoffs."
+              >
+                over weeks {{ a.weeks[0] }}–{{ a.weeks[a.weeks.length - 1] }}
+              </span>
+            </div>
+            <div class="flex flex-col gap-1 text-sm text-surface-600 dark:text-surface-300">
+              @if (a.you.drops.length) {
+                <span>You'd drop {{ names(a.you.drops) }}</span>
+              }
+              @if (a.them.drops.length) {
+                <span>They'd drop {{ names(a.them.drops) }}</span>
+              }
+              @if (a.you.openSpots) {
+                <span>You'd have {{ a.you.openSpots }} open roster {{ a.you.openSpots === 1 ? 'spot' : 'spots' }} after the trade</span>
+              }
+              @if (a.them.openSpots) {
+                <span>They'd have {{ a.them.openSpots }} open roster {{ a.them.openSpots === 1 ? 'spot' : 'spots' }} after the trade</span>
+              }
+              @if (deadlineText(); as d) {
+                <span>{{ trades.deadlinePassed() ? 'Trades closed' : 'Trade deadline' }} {{ d }}</span>
+              }
+            </div>
+          </section>
+
+          <!-- Playoff odds before and after: v1.8's simulation rerun on both new rosters. -->
+          @if (trades.odds(); as o) {
+            <section class="flex flex-col gap-2" aria-labelledby="trade-odds-title">
+              <h2 id="trade-odds-title" class="text-lg font-medium">Playoff odds</h2>
+              <div class="odds-table">
+                <span class="odds-head"></span>
+                <span class="odds-head">Playoffs</span>
+                @if (o.status === 'ready' && o.byes) {
+                  <span class="odds-head">Bye</span>
+                } @else {
+                  <span></span>
+                }
+                @for (row of [{ name: 'You', key: 'you' }, { name: partnerName(), key: 'them' }]; track row.key) {
+                  <span class="truncate">{{ row.name }}</span>
+                  @if (o.status === 'ready') {
+                    @let change = row.key === 'you' ? o.you : o.them;
+                    <span class="odds-cell tabular-nums">
+                      {{ formatOdds(change.before.playoff, change.before.clinched || change.before.eliminated) }}
+                      <i class="pi pi-arrow-right text-xs text-surface-400"></i>
+                      <span
+                        class="font-medium"
+                        [ngClass]="gainClass((change.after.playoff - change.before.playoff) * 100)"
+                      >
+                        {{ formatOdds(change.after.playoff, change.after.clinched || change.after.eliminated) }}
+                      </span>
+                    </span>
+                    @if (o.byes && change.before.bye !== null && change.after.bye !== null) {
+                      <span class="odds-cell tabular-nums">
+                        {{ formatOdds(change.before.bye, change.before.clinchedBye || change.before.byeEliminated) }}
+                        <i class="pi pi-arrow-right text-xs text-surface-400"></i>
+                        <span class="font-medium" [ngClass]="gainClass((change.after.bye - change.before.bye) * 100)">
+                          {{ formatOdds(change.after.bye, change.after.clinchedBye || change.after.byeEliminated) }}
+                        </span>
+                      </span>
+                    } @else {
+                      <span></span>
+                    }
+                  } @else {
+                    <p-skeleton width="8rem" height="1.25rem" />
+                    <span></span>
+                  }
+                }
+              </div>
+            </section>
+          }
+
+          <!-- Week by week: where in the season each side gains or loses. -->
+          @if (weekBars(); as bars) {
+            <section class="flex flex-col gap-2" aria-labelledby="trade-weeks-title">
+              <h2 id="trade-weeks-title" class="text-lg font-medium">Week by week</h2>
+              @for (row of [{ name: 'You', bars: bars.you }, { name: partnerName(), bars: bars.them }]; track row.name) {
+                <div class="week-row">
+                  <span class="week-label truncate">{{ row.name }}</span>
+                  <div class="week-bars" role="list" [attr.aria-label]="row.name + ': gain by week'">
+                    @for (b of row.bars; track b.week) {
+                      <div
+                        class="week-cell"
+                        [class.playoff-week]="b.playoff"
+                        role="listitem"
+                        [attr.aria-label]="'Week ' + b.week + ': ' + signed(b.gain)"
+                        [pTooltip]="'Week ' + b.week + (b.playoff ? ' (playoffs)' : '') + ': ' + signed(b.gain)"
+                      >
+                        <span
+                          class="week-bar"
+                          [class.bar-up]="b.up"
+                          [class.bar-down]="!b.up"
+                          [style.height.%]="b.height"
+                        ></span>
+                      </div>
+                    }
+                  </div>
+                </div>
+              }
+              <div class="week-row" aria-hidden="true">
+                <span class="week-label"></span>
+                <div class="week-bars week-axis">
+                  @for (b of bars.you; track b.week) {
+                    <span class="week-number" [class.playoff-week]="b.playoff">{{ b.week }}</span>
+                  }
+                </div>
+              </div>
+              @if (bars.hasPlayoffs) {
+                <p class="text-xs text-surface-500"><span class="playoff-swatch"></span> Fantasy playoff weeks</p>
+              }
+            </section>
+          }
+
+          <!-- Next week's lineups, before next to after. -->
+          @if (lineupRows(); as l) {
+            <section class="flex flex-col gap-3" aria-labelledby="trade-lineup-title">
+              <div class="flex flex-wrap items-center justify-between gap-3">
+                <h2 id="trade-lineup-title" class="text-lg font-medium">Week {{ a.weeks[0] }} lineup</h2>
+                <p-selectbutton
+                  [options]="lineupOptions()"
+                  [ngModel]="lineupSide()"
+                  (ngModelChange)="$event && lineupSide.set($event)"
+                  [allowEmpty]="false"
+                  optionLabel="label"
+                  optionValue="value"
+                  size="small"
+                  ariaLabelledBy="trade-lineup-title"
+                />
+              </div>
+              <p class="text-sm text-surface-600 dark:text-surface-300 tabular-nums">
+                {{ l.before | number: '1.1-1' }} <i class="pi pi-arrow-right text-xs text-surface-400"></i>
+                {{ l.after | number: '1.1-1' }} projected
+                <span class="font-medium" [ngClass]="gainClass(l.after - l.before)">({{ signed(l.after - l.before) }})</span>
+              </p>
+              <div class="lineup-table">
+                <span class="lineup-head">Slot</span>
+                <span class="lineup-head">Before</span>
+                <span class="lineup-head">After</span>
+                @for (r of l.rows; track $index) {
+                  <span class="lineup-slot">{{ r.slot }}</span>
+                  <ng-container *ngTemplateOutlet="lineupCell; context: { $implicit: r.before, mark: r.beforeMark }" />
+                  <ng-container *ngTemplateOutlet="lineupCell; context: { $implicit: r.after, mark: r.afterMark }" />
+                }
+              </div>
+            </section>
+          }
+        }
+      }
+      @default {
+        <div class="flex justify-center mt-10">
+          <p-progress-spinner ariaLabel="Loading the trade analyzer" />
+        </div>
+      }
+    }
+  </div>
+
+  <ng-template #rosterList let-roster let-side="side" let-title="title" let-team="team">
+    <section class="roster-column" [attr.aria-label]="title">
+      <h2 class="text-base font-medium">
+        {{ title }}
+        @if (team) {
+          <span class="text-surface-500 font-normal">· {{ team }}</span>
+        }
+      </h2>
+      <ul class="roster-list">
+        @for (p of roster; track p.playerId) {
+          <li class="roster-row" [class.picked]="isPicked(side, p.playerId)" [class.unpickable]="!p.pickable">
+            <button
+              type="button"
+              class="roster-toggle"
+              [disabled]="!p.pickable"
+              [attr.aria-pressed]="isPicked(side, p.playerId)"
+              [attr.title]="p.pickable ? null : unpickableNote"
+              (click)="toggle(side, p)"
+            >
+              <i class="pick-icon pi" [ngClass]="isPicked(side, p.playerId) ? 'pi-check-circle' : 'pi-circle'"></i>
+              <app-player-avatar [player]="p.player" size="large" />
+              <span class="flex flex-col min-w-0 flex-1">
+                <span class="font-medium truncate">{{ p.player.fullName }}</span>
+                <span class="roster-meta">
+                  {{ p.position }} · {{ p.player.proTeam }}
+                  @if (p.ranked) {
+                    <span class="tabular-nums" pTooltip="Position rank on rest-of-season projections.">
+                      · {{ p.position }}{{ p.ranked.positionRank }} ROS
+                    </span>
+                  }
+                  @if (p.injuredReserve) {
+                    <p-tag value="IR" severity="danger" styleClass="!text-xs" />
+                  } @else if (p.player.injuryStatus && p.player.injuryStatus !== 'ACTIVE') {
+                    <p-tag [severity]="statusSeverity(p.player.injuryStatus)" [value]="p.player.injuryStatus" styleClass="!text-xs" />
+                  }
+                </span>
+              </span>
+              @if (p.pickable) {
+                <span class="roster-proj tabular-nums" pTooltip="Projected points next week.">
+                  {{ nextWeek(p) | number: '1.1-1' }}
+                </span>
+              }
+            </button>
+            <button
+              type="button"
+              class="roster-info"
+              [attr.aria-label]="'Show details for ' + p.player.fullName"
+              (click)="openPlayer(p.player)"
+            >
+              <i class="pi pi-info-circle"></i>
+            </button>
+          </li>
+        }
+      </ul>
+    </section>
+  </ng-template>
+
+  <ng-template #lineupCell let-p let-mark="mark">
+    @if (p) {
+      <button
+        type="button"
+        class="lineup-player"
+        [class.incoming]="mark === 'in'"
+        [class.outgoing]="mark === 'out' || mark === 'drop'"
+        (click)="openPlayer(p.entry.player)"
+      >
+        <span class="truncate">{{ p.entry.player.fullName }}</span>
+        <span class="lineup-meta tabular-nums">
+          {{ p.projected | number: '1.1-1' }}
+          @if (mark) {
+            <p-tag
+              [value]="markLabels[mark]"
+              [severity]="mark === 'in' ? 'success' : mark === 'out' ? 'warn' : 'danger'"
+              styleClass="!text-xs"
+            />
+          }
+        </span>
+      </button>
+    } @else {
+      <span class="text-surface-500 lineup-empty">Empty</span>
+    }
+  </ng-template>
+
+  <app-player-detail-drawer [player]="selectedPlayer()" (closed)="selectedPlayer.set(null)" />
+}

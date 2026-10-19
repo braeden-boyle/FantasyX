@@ -26,7 +26,7 @@
             <span class="text-surface-500">({{ t.abbrev }})</span>
           }
         </h1>
-        <div class="flex items-center gap-3">
+        <div class="flex flex-wrap items-center gap-3">
           @if (t.leagueName) {
             <p-chip [label]="t.leagueName" icon="pi pi-trophy" class="w-fit" />
           }
@@ -35,6 +35,22 @@
             <i class="pi pi-bolt" pButtonIcon></i>
             <span pButtonLabel>View Matchup</span>
           </a>
+          <!-- Another team's roster: open the trade analyzer with them picked. A plain link, so no trade
+               code reaches the initial bundle. -->
+          @if (!isOwnTeam()) {
+            <a
+              pButton
+              routerLink="/advice/trades"
+              [queryParams]="{ team: t.teamId }"
+              [outlined]="true"
+              [rounded]="true"
+              size="small"
+              class="matchup-pill trade-pill"
+            >
+              <i class="pi pi-arrow-right-arrow-left" pButtonIcon></i>
+              <span pButtonLabel class="truncate">Trade with {{ t.name }}</span>
+            </a>
+          }
         </div>
       </div>
       <!-- The record, then standing, power rank and playoff odds tiles; full width on phones. -->

@@ -83,8 +83,10 @@ public static class EspnLookups
 
     public static bool IsStarterSlot(int lineupSlotId) => !BenchSlots.Contains(lineupSlotId);
 
+    public static bool IsInjuredReserve(int lineupSlotId) => lineupSlotId == InjuredReserveSlotId;
+
     // Every slot but IR takes a roster spot: starters, bench and IDP alike.
-    public static bool TakesRosterSpot(int lineupSlotId) => lineupSlotId != InjuredReserveSlotId;
+    public static bool TakesRosterSpot(int lineupSlotId) => !IsInjuredReserve(lineupSlotId);
 
     // A starting slot's name and the positions that can fill it; null for bench, IR and slots
     // draft-day lineups don't fill.

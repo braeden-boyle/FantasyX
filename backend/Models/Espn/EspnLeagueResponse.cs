@@ -15,7 +15,12 @@ public record EspnSettings(
     string? Name,
     EspnScheduleSettings? ScheduleSettings,
     EspnRosterSettings? RosterSettings,
-    EspnAcquisitionSettings? AcquisitionSettings);
+    EspnAcquisitionSettings? AcquisitionSettings,
+    EspnTradeSettings? TradeSettings);
+
+// When trades close. DeadlineDate is epoch milliseconds, read as a double so an odd number format
+// can't break the league call.
+public record EspnTradeSettings(double? DeadlineDate);
 
 // How the league adds players. ESPN sends AcquisitionBudget (100 by default) even when the league
 // doesn't use FAAB, so it only means anything with IsUsingAcquisitionBudget.
