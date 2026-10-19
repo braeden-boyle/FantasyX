@@ -121,6 +121,8 @@ export class StartSitService {
   readonly scoringPeriod = computed(() => this.week()?.scoringPeriod ?? null);
   // This NFL week's games, for when free agents lock. Empty when ESPN's scoreboard couldn't be read.
   readonly nflGames = computed(() => this.week()?.nflGames ?? []);
+  // Every team in the loaded week, for the trade analyzer's partner. Empty until the week loads.
+  readonly teams = computed(() => this.week()?.teams ?? []);
 
   // Your team and this week's opponent (null on a bye), from the loaded week.
   readonly side = computed<{ team: MatchupTeam; opponent: MatchupTeam | null } | null>(() => {
