@@ -136,7 +136,7 @@
           <!-- Summary: the read on both sides, and what each would have to drop. -->
           <section class="summary-card" aria-live="polite">
             <p class="text-lg font-medium">{{ a.label }}</p>
-            <p class="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
               <span class="flex items-center gap-1">
                 You <span class="font-medium tabular-nums" [ngClass]="gainClass(a.you.gain)">{{ signed(a.you.gain) }}</span>
                 <p-tag [value]="outcomeLabels[a.you.outcome]" [severity]="outcomeSeverity(a.you.outcome)" styleClass="!text-xs" />
@@ -152,7 +152,7 @@
               >
                 over weeks {{ a.weeks[0] }}–{{ a.weeks[a.weeks.length - 1] }}
               </span>
-            </p>
+            </div>
             <div class="flex flex-col gap-1 text-sm text-surface-600 dark:text-surface-300">
               @if (a.you.drops.length) {
                 <span>You'd drop {{ names(a.you.drops) }}</span>
@@ -188,7 +188,7 @@
                   <span class="truncate">{{ row.name }}</span>
                   @if (o.status === 'ready') {
                     @let change = row.key === 'you' ? o.you : o.them;
-                    <span class="tabular-nums">
+                    <span class="odds-cell tabular-nums">
                       {{ formatOdds(change.before.playoff, change.before.clinched || change.before.eliminated) }}
                       <i class="pi pi-arrow-right text-xs text-surface-400"></i>
                       <span
@@ -199,7 +199,7 @@
                       </span>
                     </span>
                     @if (o.byes && change.before.bye !== null && change.after.bye !== null) {
-                      <span class="tabular-nums">
+                      <span class="odds-cell tabular-nums">
                         {{ formatOdds(change.before.bye, change.before.clinchedBye || change.before.byeEliminated) }}
                         <i class="pi pi-arrow-right text-xs text-surface-400"></i>
                         <span class="font-medium" [ngClass]="gainClass((change.after.bye - change.before.bye) * 100)">

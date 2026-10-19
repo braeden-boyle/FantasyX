@@ -139,6 +139,11 @@
   background: var(--p-content-background);
 }
 
+/* Before -> after stays on one line. */
+.odds-cell {
+  white-space: nowrap;
+}
+
 .odds-head,
 .lineup-head {
   font-size: 0.75rem;
