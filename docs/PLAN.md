@@ -20,7 +20,7 @@
 | Roster suggestions (parent) | #25, sub-issues #26–#28 | Start/sit (#26) and waivers (#27) merged. Trades (#28) built, not yet merged |
 | v1.12 — Start/sit assistant | #26 `26-add-start-sit-assistant` (PR #29) | Merged; checked against a mock API and the live league |
 | v1.13 — Waiver wire assistant | #27 `27-add-waiver-wire-assistant` (PR #30) | Merged; checked against the live league and simulated FAAB / failure cases |
-| v1.14 — Trade analyzer | #28 `28-add-trade-analyzer` (PR #31) | Built and checked against a mock API; the live-league spike and checks still to do |
+| v1.14 — Trade analyzer | #28 `28-add-trade-analyzer` (PR #31) | Built; checked against a mock API and the live league |
 
 Sections below were first written as forward-looking plans. v1 and v1.1 are kept as the design record, with corrections where the build turned out differently.
 
@@ -1438,7 +1438,7 @@ Judge a trade you're thinking of proposing, for both sides. You pick the other t
   - **Spike (2026-10-18), on ESPN's public league defaults** (`leaguedefaults/3`, `mSettings`):
     - `settings.tradeSettings` has `deadlineDate` in epoch ms (1796230800000, Dec 2 2026 17:00 UTC), plus `revisionHours` (24), `vetoVotesRequired` (4), `allowOutOfUniverse` and `max`.
     - `rosterSettings.lineupSlotCounts["21"]` is the IR count, 1 on the defaults.
-  - **The live league's raw settings weren't read.** A backend built from this branch ran on port 8081 with `--contentRoot` (v1.13's dev setup note), but the browser pane has no saved ESPN cookies for its device, so `GET /api/credentials` answered 404. That check is still to do (see Not checked yet).
+  - **The live league's raw settings weren't read here.** A backend built from this branch ran on port 8081 with `--contentRoot` (v1.13's dev setup note), but the browser pane has no saved ESPN cookies for its device, so `GET /api/credentials` answered 404. The user checked the deadline on the live league instead (see Verification done).
   - `EspnTradeSettings(DeadlineDate)` is read as a double. A missing deadline, or 0, maps to null. `EspnLookups.IsInjuredReserve` sits behind both `IrSlots` and `TakesRosterSpot`.
 - **`utils/lineup.ts`:** `weekLineup` is generic over the player type, so waivers' players and the trade analyzer's entries both pass.
 - **`utils/trades.ts`:**
@@ -1490,14 +1490,14 @@ Judge a trade you're thinking of proposing, for both sides. You pick the other t
   - **FantasyX mode:** the analysis reruns (−42.5 becomes −46.8), the tag shows, and the odds rerun.
   - **IDP and tabs:** the IDP player is greyed out and can't be picked. No Advice tab reads "Soon".
   - **Phone width:** no page overflow at 375px on the Trades page or the roster page. Each odds before → after now stays on one line, which it didn't at first.
-- **Not checked yet:**
-  - **The live-league spike:** `deadlineDate` and the IR count on the real league, and `TradeDeadline` / `IrSlots` against ESPN's league settings page (step 2). This needs the league's cookies in the browser the app runs in.
-  - **Step 4 on the live league:**
-    - Timing `tradeAnalysis` and the odds run on a 2-for-1 and a 3-for-1.
-    - A hand spot-check of one trade.
-    - The deadline matching ESPN.
-  - Headshots, which the mock has none of.
-  - The week failing and the league being unavailable. Those states are shared with start/sit and waivers, which were checked there.
+- **Live league (2026-10-18):** the user checked and confirmed it on their real league, through servers run from this branch. That covers:
+  - the trade deadline against ESPN's league settings
+  - how a received IR player is placed
+  - how 2-for-1 and 3-for-1 trades respond, and that the odds move the way the gains do
+  - "Trade with" on another team's roster, and a reload keeping the trade
+
+  This stands in for the live half of the spike (step 2) and for step 4. No timings were recorded.
+- **Not checked yet:** the week failing and the league being unavailable. Those states are shared with start/sit and waivers, which were checked there.
 
 ## Open questions
 
