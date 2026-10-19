@@ -17,10 +17,10 @@
 | v1.9 — Player rankings | #19 `19-add-player-rankings` | Built and checked against a mock league; live-league checks still to do |
 | v1.10 — Matchup UI improvements | #21 `21-matchup-ui-improvements` | Built and checked against a mock API; live-league checks still to do |
 | v1.11 — NFL scoreboard | #23 `23-nfl-scoreboard` (PR #24) | Merged; checked against ESPN, a mock API and the live league. Live-game checks still to do |
-| Roster suggestions (parent) | #25, sub-issues #26–#28 | Start/sit (#26) and waivers (#27) merged. Trades (#28) planned |
+| Roster suggestions (parent) | #25, sub-issues #26–#28 | Start/sit (#26) and waivers (#27) merged. Trades (#28) built, not yet merged |
 | v1.12 — Start/sit assistant | #26 `26-add-start-sit-assistant` (PR #29) | Merged; checked against a mock API and the live league |
 | v1.13 — Waiver wire assistant | #27 `27-add-waiver-wire-assistant` (PR #30) | Merged; checked against the live league and simulated FAAB / failure cases |
-| v1.14 — Trade analyzer | #28 `28-add-trade-analyzer` | Planned; decisions asked 2026-10-18 |
+| v1.14 — Trade analyzer | #28 `28-add-trade-analyzer` (PR #31) | Built and checked against a mock API; the live-league spike and checks still to do |
 
 Sections below were first written as forward-looking plans. v1 and v1.1 are kept as the design record, with corrections where the build turned out differently.
 
@@ -1431,6 +1431,73 @@ Judge a trade you're thinking of proposing, for both sides. You pick the other t
    - Time `tradeAnalysis` and the odds run on a 2-for-1 and a 3-for-1.
    - Spot-check one trade by hand: each side's gain against the players' weekly projections on the Rankings page, and that the odds move the way the gains do.
    - The trade deadline matches ESPN.
+
+## As built
+
+- **Backend:**
+  - **Spike (2026-10-18), on ESPN's public league defaults** (`leaguedefaults/3`, `mSettings`):
+    - `settings.tradeSettings` has `deadlineDate` in epoch ms (1796230800000, Dec 2 2026 17:00 UTC), plus `revisionHours` (24), `vetoVotesRequired` (4), `allowOutOfUniverse` and `max`.
+    - `rosterSettings.lineupSlotCounts["21"]` is the IR count, 1 on the defaults.
+  - **The live league's raw settings weren't read.** A backend built from this branch ran on port 8081 with `--contentRoot` (v1.13's dev setup note), but the browser pane has no saved ESPN cookies for its device, so `GET /api/credentials` answered 404. That check is still to do (see Not checked yet).
+  - `EspnTradeSettings(DeadlineDate)` is read as a double. A missing deadline, or 0, maps to null. `EspnLookups.IsInjuredReserve` sits behind both `IrSlots` and `TakesRosterSpot`.
+- **`utils/lineup.ts`:** `weekLineup` is generic over the player type, so waivers' players and the trade analyzer's entries both pass.
+- **`utils/trades.ts`:**
+  - `missingPicks`, `tradeOutcome` and `tradeLabel` are exported beside the planned functions. `tradeAnalysis` returns null until both sides have a player, and with no weeks.
+  - **The drop search:** dropping more never raises a roster's value, so a set of drops costs at least what its costliest member costs alone. Candidates are tried cheapest first, and the search stops once one alone costs more than the best set found. Beyond `MAX_EXACT_DROPS`, each one-at-a-time step is the exact one-drop search.
+  - A side with no more droppable players than it's over drops all of them. A side already over the roster size before the trade (ESPN mid-move) also drops after it.
+  - A gain within `EVEN_MARGIN` either way, the edge included, reads about even. Labels where both sides agree read "Good for both", "About even for both" or "Bad for both". Mixed ones read like "You gain, they lose" or "About even for you, they gain".
+  - Received IR players fill free IR slots in the order they were picked. Sending away your own IR player frees their slot.
+- **Playoff odds:**
+  - `teamWeeklyStrengths(players, scores, weeks, slots, futureProjectionOf, thisWeek)` takes `thisWeek` as `{ week, projectionOf }`, or null when every week should be a best lineup (the rebuilt weeks).
+  - `withPeriodStrengths(input, byPeriod)` in `playoff-odds.ts` swaps some teams' period strengths and keeps everything else, the seed included.
+  - `oddsAfter` keeps each team's strengths before `fromWeek` and rebuilds the rest.
+- **`TradesService`:**
+  - `StartSitService.teams` now exposes the week's teams, for the partner.
+  - The trade is a `TradeDraft` (`partnerId` null until a team is picked). An IDP player's id in an edited address is ignored.
+  - **Odds rerun:** the request compares equal while both new rosters (ids and slots) and the base odds are the same. It waits 300 ms on a plain timeout: rxjs's `timer` would have pulled its scheduler into a chunk the initial bundle shares. The after figures only show once their run matches the base odds on screen.
+- **Page:**
+  - **Picks** show as plain removable buttons ("Send Andre Fields ⊗") rather than `p-chip`.
+  - **Rosters** are sorted by starting position, then rest-of-season points. IDP players come last, greyed out, with a tooltip. A tap on a row toggles the player, and an info button beside it opens the drawer.
+  - **Summary:** the label, both gains with Gains / About even / Loses tags, the window, drops, open spots and the deadline line. The projection-source tag is in the page header, as on Waivers.
+  - **Deadline:** formatted with `Intl.DateTimeFormat` ("Dec 2") rather than `DatePipe`. `DatePipe`'s date code lives in a module the initial bundle already holds, so using it put about 10 kB into the initial bundle.
+  - **Playoff odds:** Playoffs and Bye columns, each before → after, coloured by direction, with a skeleton while the run is under way.
+  - **Week by week:** a bar up or down from a midline for each week, scaled to the largest week on either side, with a tooltip for each. Playoff weeks are tinted.
+  - **Lineup:** a You / partner switch, slot by slot in the optimizer's fill order (as start/sit lists them), with In, Out and Drop tags. Incoming players get a primary-coloured edge. The lineup's total shows before → after.
+  - **"Trade with {team}"** is a pill beside View Matchup. The row wraps on phones, and a long team name truncates.
+
+## Verification done
+
+- **Builds:**
+  - `dotnet build`: 0 warnings, 0 errors.
+  - `ng build` passes. The initial bundle is 1.57 MB, 71.9 kB over the warning budget. That's 1.5 kB more than the base commit (70.4 kB over), from `oddsAfter` and the strength helpers in the root `LeagueOutlookService` plus the "Trade with" link. The plan puts both in initial code. No trade-analyzer code reaches the initial bundle. The `/advice` chunk grows from 34.7 kB to 70.3 kB.
+  - Vitest: 202 tests, 24 of them new.
+    - 19 in `trades.spec.ts`. Among them, `bestDrops` matches brute force on 180 random rosters, 60 each with 1, 2 and 3 drops.
+    - 5 in `power-rankings.spec.ts`: `teamWeeklyStrengths`, `periodStrengthsOf`, and the odds after a roster change. Unchanged rosters give exactly the same odds, and a swap moves both teams the right way.
+    - The existing lineup, waivers, power-rankings and playoff-odds tests pass unchanged.
+- **UI against a mock API.** The production build was served by a small Node server with an 8-team league in week 7: 1 IR slot, a 12-player roster, 6 playoff teams with 2 byes, and a deadline of Nov 25.
+  - **1-for-1:** Andre Fields for Chris Doyle reads "You gain, they lose", You +10.4 · Them −51.8. Your bye odds go 93.2% → 95.3%; their playoff odds go 58.8% → 47.6%.
+  - **Gains now, loses the playoffs:** the same trade gains +5.2 and +9.9 in weeks 8–9, and loses 4.5, 2.5 and 4.8 in weeks 15–17, as Doyle fades. Byes show as dips.
+  - **2-for-1:** you'd drop Theo Walsh, and they'd have 1 open roster spot.
+  - **IR:**
+    - Sending your IR RB (back in week 11) for a healthy RB costs you 23.2, all from week 11 on.
+    - Receiving their IR WR with your IR slot full puts him on the bench, and you drop Theo Walsh.
+  - **Deadline passed:** the "Trades closed on Oct 16" note shows, and the analysis still works.
+  - **A picked player who's since left the roster:** "1 player picked is no longer on that roster", with the analysis on the rest.
+  - **After the regular season** (week 15): the odds block is left out, and the window is weeks 16–17.
+  - **The last week** (week 17): "There's no week left for a trade to count in."
+  - **The address:** a reload keeps the trade. "Trade with Hail Mary Heroes" on `/team/3` opens `?team=3` with the team picked. There's no button on `/team` or `/team/1`.
+  - **One odds run:** ticking four players within about 120 ms started one odds worker.
+  - **FantasyX mode:** the analysis reruns (−42.5 becomes −46.8), the tag shows, and the odds rerun.
+  - **IDP and tabs:** the IDP player is greyed out and can't be picked. No Advice tab reads "Soon".
+  - **Phone width:** no page overflow at 375px on the Trades page or the roster page. Each odds before → after now stays on one line, which it didn't at first.
+- **Not checked yet:**
+  - **The live-league spike:** `deadlineDate` and the IR count on the real league, and `TradeDeadline` / `IrSlots` against ESPN's league settings page (step 2). This needs the league's cookies in the browser the app runs in.
+  - **Step 4 on the live league:**
+    - Timing `tradeAnalysis` and the odds run on a 2-for-1 and a 3-for-1.
+    - A hand spot-check of one trade.
+    - The deadline matching ESPN.
+  - Headshots, which the mock has none of.
+  - The week failing and the league being unavailable. Those states are shared with start/sit and waivers, which were checked there.
 
 ## Open questions
 
