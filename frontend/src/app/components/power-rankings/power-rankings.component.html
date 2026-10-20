@@ -1,5 +1,5 @@
 <!-- One container for both rankings: this week's (switchable to the rest of the season's), and below it
-     each team's move since draft day. -->
+     each team's move from draft day to its rest-of-season rank. -->
 <section class="rankings-group" aria-labelledby="power-rankings-title">
   <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
     <h2 id="power-rankings-title" class="text-lg font-medium">Power Rankings</h2>
@@ -123,47 +123,55 @@
     }
   </p-card>
 
-  @if (view()?.status === 'ready' && view()!.hasDraft) {
-    @let v = view()!;
+  @if (sinceDraft(); as d) {
     <p-card class="block mt-4">
       <h3 class="card-title">Since Draft Day</h3>
-      <div class="draft-row draft-axis" aria-hidden="true">
-        <span></span>
-        <span class="flex justify-between"><span>{{ ordinal(teamCount()) }}</span><span>1st</span></span>
-        <span></span>
-      </div>
-      <ol class="rankings-list">
-        @for (r of v.rankings; track r.teamId) {
-          <li class="draft-row" [class.rankings-row-mine]="isMine(r.teamId)">
-            <span class="truncate" [class.font-semibold]="isMine(r.teamId)">{{ name(r.teamId) }}</span>
-            @if (r.draftRank !== null) {
-              <span class="track" aria-hidden="true">
-                @if (r.draftRank === r.rank) {
-                  <span class="dot" [style.left.%]="position(r.rank)"></span>
-                } @else {
-                  <span
-                    class="arrow"
-                    [class.arrow-up]="r.rank < r.draftRank"
-                    [class.arrow-down]="r.rank > r.draftRank"
-                    [style.left.%]="Math.min(position(r.rank), position(r.draftRank))"
-                    [style.width.%]="Math.abs(position(r.rank) - position(r.draftRank))"
-                  ></span>
-                }
-              </span>
-              <span class="draft-ranks tabular-nums">
-                <span class="sr-only">Draft-day rank {{ r.draftRank }}, now {{ r.rank }}.</span>
-                <span aria-hidden="true">{{ r.draftRank }} → {{ r.rank }}</span>
-              </span>
-            } @else {
-              <span class="track"></span>
-              <span class="draft-ranks text-surface-500">–</span>
-            }
-          </li>
-        }
-      </ol>
-      <p class="legend">
-        Each arrow runs from a team's draft-day rank (the best lineup its picks could field) to its rank now.
-      </p>
+      @if (d.status === 'ready') {
+        <div class="draft-row draft-axis" aria-hidden="true">
+          <span></span>
+          <span class="flex justify-between"><span>{{ ordinal(teamCount()) }}</span><span>1st</span></span>
+          <span></span>
+        </div>
+        <ol class="rankings-list">
+          @for (r of d.rankings; track r.teamId) {
+            <li class="draft-row" [class.rankings-row-mine]="isMine(r.teamId)">
+              <span class="truncate" [class.font-semibold]="isMine(r.teamId)">{{ name(r.teamId) }}</span>
+              @if (r.draftRank !== null) {
+                <span class="track" aria-hidden="true">
+                  @if (r.draftRank === r.rank) {
+                    <span class="dot" [style.left.%]="position(r.rank)"></span>
+                  } @else {
+                    <span
+                      class="arrow"
+                      [class.arrow-up]="r.rank < r.draftRank"
+                      [class.arrow-down]="r.rank > r.draftRank"
+                      [style.left.%]="Math.min(position(r.rank), position(r.draftRank))"
+                      [style.width.%]="Math.abs(position(r.rank) - position(r.draftRank))"
+                    ></span>
+                  }
+                </span>
+                <span class="draft-ranks tabular-nums">
+                  <span class="sr-only">Draft-day rank {{ r.draftRank }}, {{ d.basis === 'ros' ? 'rest-of-season' : 'this week' }} {{ r.rank }}.</span>
+                  <span aria-hidden="true">{{ r.draftRank }} → {{ r.rank }}</span>
+                </span>
+              } @else {
+                <span class="track"></span>
+                <span class="draft-ranks text-surface-500">–</span>
+              }
+            </li>
+          }
+        </ol>
+        <p class="legend">
+          Each arrow runs from a team's draft-day rank (the best lineup its picks could field) to its
+          {{ d.basis === 'ros' ? 'rest-of-season rank' : 'rank this week' }}.
+        </p>
+      } @else {
+        <div class="flex flex-col gap-2" role="status" aria-label="Loading draft-day movement">
+          @for (i of placeholders(); track i) {
+            <p-skeleton height="1.25rem" />
+          }
+        </div>
+      }
     </p-card>
   }
 </section>

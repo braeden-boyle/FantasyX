@@ -29,13 +29,6 @@ interface LeagueLoad {
 
 type WeekLoad = { status: 'loading' } | { status: 'ready'; week: WeekMatchups } | { status: 'failed' };
 
-// A team's power rank, plus where it ranked on draft day (each team's best lineup from its draft
-// picks, on week 1 projections) and the places climbed since. Both null without a draft.
-export interface RankedTeam extends PowerRank {
-  draftRank: number | null;
-  sinceDraft: number | null;
-}
-
 // completedWeeks: regular-season weeks the ranking is through (0 before week 1). Movement compares
 // with the ranking through the week before that; after week 1, that's the draft-day ranking.
 // hasDraft: the draft-day ranking is available.
@@ -44,7 +37,7 @@ export interface RankedTeam extends PowerRank {
 // movementUnavailable: the history behind last week's roster strength failed, so no arrows.
 export interface RankingsView {
   status: 'loading' | 'ready' | 'unavailable';
-  rankings: RankedTeam[];
+  rankings: PowerRank[];
   completedWeeks: number;
   hasDraft: boolean;
   resultsWeight: number;
@@ -60,6 +53,16 @@ export interface RestOfSeasonView {
   rankings: { teamId: number; rank: number; score: number; vsNow: number }[];
   fromWeek: number;
   toWeek: number;
+}
+
+// Each team's draft-day rank (its best lineup from its draft picks, on week 1 projections; null if
+// it made none) against its rest-of-season rank, in rest-of-season order. basis 'week' means the
+// rest of the season's ranking isn't available (upcoming projections failed, or no weeks remain),
+// so this week's stands in.
+export interface SinceDraftView {
+  status: 'loading' | 'ready';
+  rankings: { teamId: number; draftRank: number | null; rank: number }[];
+  basis: 'ros' | 'week';
 }
 
 // How hard a team's remaining regular-season schedule is: its opponents' average strength in the
@@ -254,15 +257,11 @@ export class LeagueOutlookService {
       }
     }
 
-    const draftRanks = draft ? rankByStrength(draft) : null;
     return {
       status: 'ready',
-      rankings: powerRankings(now, previous).map((r) => {
-        const draftRank = draftRanks?.get(r.teamId) ?? null;
-        return { ...r, draftRank, sinceDraft: draftRank === null ? null : draftRank - r.rank };
-      }),
+      rankings: powerRankings(now, previous),
       completedWeeks: lastCompleted,
-      hasDraft: draftRanks !== null,
+      hasDraft: draft !== null,
       resultsWeight: rosters ? lastCompleted / (lastCompleted + RESULTS_WEIGHT_GAMES) : 1,
       resultsOnly: rosters === null,
       movementUnavailable: this.projections.historyStatus() === 'failed' && rosters !== null,
@@ -273,7 +272,7 @@ export class LeagueOutlookService {
     () => new Map((this.rankings()?.rankings ?? []).map((r) => [r.teamId, r] as const)),
   );
 
-  rankOf(teamId: number): RankedTeam | undefined {
+  rankOf(teamId: number): PowerRank | undefined {
     return this.ranksById().get(teamId);
   }
 
@@ -344,6 +343,23 @@ export class LeagueOutlookService {
         .sort((a, b) => a.rank - b.rank),
       fromWeek: Math.min(...weeks),
       toWeek: Math.max(...weeks),
+    };
+  });
+
+  // Null without a draft, or until this week's ranking is ready.
+  readonly sinceDraft = computed<SinceDraftView | null>(() => {
+    const draft = this.draftStrengths();
+    const rankings = this.rankings();
+    if (!draft || rankings?.status !== 'ready') return null;
+    const draftRanks = rankByStrength(draft);
+    const ros = this.restOfSeason();
+    if (ros?.status === 'loading') return { status: 'loading', rankings: [], basis: 'ros' };
+    const basis = ros?.status === 'ready' ? 'ros' : 'week';
+    const ranked = basis === 'ros' ? ros!.rankings : rankings.rankings;
+    return {
+      status: 'ready',
+      rankings: ranked.map(({ teamId, rank }) => ({ teamId, rank, draftRank: draftRanks.get(teamId) ?? null })),
+      basis,
     };
   });
 
