@@ -31,22 +31,24 @@
           </div>
         </div>
         <div class="flex items-center gap-1 shrink-0">
-          <p-button
-            icon="pi pi-chevron-left"
-            [text]="true"
-            [rounded]="true"
-            [disabled]="!hasPrevious()"
-            ariaLabel="Previous player"
-            (onClick)="previous.emit()"
-          />
-          <p-button
-            icon="pi pi-chevron-right"
-            [text]="true"
-            [rounded]="true"
-            [disabled]="!hasNext()"
-            ariaLabel="Next player"
-            (onClick)="next.emit()"
-          />
+          @if (steppable()) {
+            <p-button
+              icon="pi pi-chevron-left"
+              [text]="true"
+              [rounded]="true"
+              [disabled]="!hasPrevious()"
+              ariaLabel="Previous player"
+              (onClick)="previous.emit()"
+            />
+            <p-button
+              icon="pi pi-chevron-right"
+              [text]="true"
+              [rounded]="true"
+              [disabled]="!hasNext()"
+              ariaLabel="Next player"
+              (onClick)="next.emit()"
+            />
+          }
           <p-button
             icon="pi pi-refresh"
             [text]="true"

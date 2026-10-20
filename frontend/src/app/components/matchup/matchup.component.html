@@ -392,5 +392,18 @@
         }
       }
     }
+
+    <!-- The week's breakdown is all the modal shows; the drawer has the season and game log. -->
+    <ng-template #footer>
+      <p-button
+        label="View player stats"
+        icon="pi pi-chart-bar"
+        [text]="true"
+        size="small"
+        (onClick)="openStats()"
+      />
+    </ng-template>
   </p-dialog>
+
+  <app-player-detail-drawer [player]="statsPlayer()" [steppable]="false" (closed)="statsPlayer.set(null)" />
 }

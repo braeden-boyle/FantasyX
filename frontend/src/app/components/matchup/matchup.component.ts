@@ -18,6 +18,7 @@ import { PlayerDetailService } from '../../services/player-detail.service';
 import { ProjectionsService } from '../../services/projections.service';
 import { TeamLogoComponent } from '../team-logo/team-logo.component';
 import { PlayerAvatarComponent } from '../player-avatar/player-avatar.component';
+import { PlayerDetailDrawerComponent } from '../player-detail-drawer/player-detail-drawer.component';
 import { ScoringBreakdownComponent } from '../scoring-breakdown/scoring-breakdown.component';
 import { ProjectionSourceComponent } from '../projection-source/projection-source.component';
 import { NflGamesStripComponent, StripSide } from '../nfl-games-strip/nfl-games-strip.component';
@@ -79,6 +80,7 @@ interface WeekLoad {
     TeamLogoComponent,
     ScoringBreakdownComponent,
     PlayerAvatarComponent,
+    PlayerDetailDrawerComponent,
     ProjectionSourceComponent,
     NflGamesStripComponent,
   ],
@@ -484,6 +486,15 @@ export class MatchupComponent {
 
   protected onDialogVisibleChange(visible: boolean): void {
     if (!visible) this.selectedPlayer.set(null);
+  }
+
+  // The player whose detail drawer is open, reached from the modal.
+  protected readonly statsPlayer = signal<Player | null>(null);
+
+  // Swaps the modal for the player's detail drawer.
+  protected openStats(): void {
+    this.statsPlayer.set(this.selectedPlayer());
+    this.selectedPlayer.set(null);
   }
 
   protected retryBreakdown(): void {
