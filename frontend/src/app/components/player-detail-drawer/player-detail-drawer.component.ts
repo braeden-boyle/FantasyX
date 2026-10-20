@@ -76,6 +76,8 @@ export class PlayerDetailDrawerComponent {
 
   // The row that was clicked; the header renders from it immediately while the detail loads.
   readonly player = input<DrawerPlayer | null>(null);
+  // False where there's no list to step through, which hides the previous/next arrows.
+  readonly steppable = input(true);
   readonly hasPrevious = input(false);
   readonly hasNext = input(false);
 
