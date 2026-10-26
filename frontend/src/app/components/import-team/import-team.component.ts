@@ -90,6 +90,13 @@ export class ImportTeamComponent implements OnInit {
   );
   protected readonly demoTeams = computed(() => this.demoLeague()?.teams ?? []);
   protected readonly demoTeamId = linkedSignal(() => this.demo.teamId() ?? this.demoLeague()?.manifest.defaultTeamId ?? null);
+  // What the demo shows, with the icons of the tabs they're on.
+  protected readonly demoFeatures = [
+    { icon: 'pi pi-bolt', label: 'Live scores & win odds' },
+    { icon: 'pi pi-lightbulb', label: 'Start/sit, waivers & trades' },
+    { icon: 'pi pi-trophy', label: 'Power rankings & playoff odds' },
+    { icon: 'pi pi-users', label: 'Player rankings' },
+  ];
   protected readonly startingDemo = signal(false);
   protected readonly demoError = signal<string | null>(null);
 
