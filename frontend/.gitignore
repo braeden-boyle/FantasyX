@@ -25,3 +25,6 @@ yarn-error.log
 .env
 .DS_Store
 Thumbs.db
+
+# Demo capture before scrubbing: still has the real league names (see scripts/capture-demo.ts)
+/demo-raw

@@ -27,7 +27,7 @@ import {
   startingPositions,
 } from '../src/app/utils/player-rankings';
 import { ProjectionSource } from '../src/app/utils/projections';
-import { HttpError, captureWindow, defaultSeason, withRetries } from './capture-helpers';
+import { captureWindow, defaultSeason, postJson, withRetries } from './capture-helpers';
 
 interface Config {
   apiUrl: string;
@@ -67,21 +67,8 @@ function readConfig(): Config {
   };
 }
 
-async function post<T>(config: Config, path: string, body: unknown, headers: Record<string, string> = {}): Promise<T> {
-  const response = await fetch(`${config.apiUrl}${path}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...headers },
-    body: JSON.stringify(body),
-  });
-  if (!response.ok) {
-    // The backend's problem titles never echo cookies back, so they're safe to log.
-    const title = await response
-      .json()
-      .then((problem: { title?: string }) => problem.title)
-      .catch(() => undefined);
-    throw new HttpError(response.status, `${path} answered ${response.status}${title ? `: ${title}` : ''}`);
-  }
-  return (await response.json()) as T;
+function post<T>(config: Config, path: string, body: unknown, headers: Record<string, string> = {}): Promise<T> {
+  return postJson<T>(config.apiUrl, path, body, headers);
 }
 
 async function capture(): Promise<void> {

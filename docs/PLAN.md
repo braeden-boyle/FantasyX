@@ -21,6 +21,7 @@
 | v1.12 — Start/sit assistant | #26 `26-add-start-sit-assistant` (PR #29) | Merged; checked against a mock API and the live league |
 | v1.13 — Waiver wire assistant | #27 `27-add-waiver-wire-assistant` (PR #30) | Merged; checked against the live league and simulated FAAB / failure cases |
 | v1.14 — Trade analyzer | #28 `28-add-trade-analyzer` (PR #31) | Built; checked against a mock API and the live league |
+| Demo mode | #36 | Planned |
 
 Sections below were first written as forward-looking plans. v1 and v1.1 are kept as the design record, with corrections where the build turned out differently.
 
@@ -1505,3 +1506,149 @@ Judge a trade you're thinking of proposing, for both sides. You pick the other t
 - Whether counting IR players in roster value should spread to the playoff odds (and to waivers), now that the analyzer does it.
 - Whether a side's open spot should be credited with its best free agent after all. The open-spot note may undersell 2-for-1s, which is often the point of them.
 - Whether the review period (`revisionHours`) should move the window when it's short enough for a trade to clear before this week's games.
+
+---
+
+# Demo mode (issue #36)
+
+## Goal
+
+Let a visitor who's curious about FantasyX, but has no ESPN league to hand (or doesn't want to paste cookies), try the whole app from the landing page. A **Try the demo** card on the import page opens a real, scrubbed league with every tab working: roster, matchup, league, rankings, advice and the NFL game pages. It's served entirely from bundled fixtures, so it needs no backend, no ESPN and no credentials, and it behaves the same in the offseason.
+
+## Decisions (asked 2026-10-26)
+
+- **Data: a scrubbed snapshot of a real league.** A capture script records the backend's responses for one real league. A scrub step then swaps every team name, abbreviation, manager name and uploaded logo for made-up ones, and renames the league "FantasyX Demo League". NFL players, stats and projections stay real.
+- **Two scenarios, switchable at any time:**
+  - **Mid-week:** last week's games are final and this week's haven't kicked off. This is the scenario for start/sit, waivers and trades.
+  - **Game day:** a recorded replay of a real Sunday. Games go from upcoming to live to final, with real scores, last plays and box scores, and the matchup view's win probability moves with them.
+- **Game day is recorded, not simulated.** A capture run during a real Sunday saves the matchups and each NFL game's detail every ~10 minutes. The demo plays those frames back on a demo clock. It can only be captured on a game day; the next one is Sunday, Nov 1.
+- **Served from frontend fixtures.** JSON files under `frontend/public/demo/`, answered by an HTTP interceptor while demo mode is on. In demo mode the app makes no `/api` calls at all.
+- **Behaviour once it's on:**
+  - **Banner + exit:** a slim banner under the header says it's a demo league. It holds the scenario switch, the team picker, and an **Import your own team** action that leaves demo mode.
+  - **Survives a refresh:** demo mode, the scenario and the team are kept in the last-import entry, so a reload or a deep link (`/advice/trades`) stays in the demo.
+  - **Shareable link:** `?demo=midweek` or `?demo=gameday` (plus an optional `&team=3`) on any route starts the demo there, for links from the README or a portfolio. A bare `?demo` means mid-week with the default team.
+  - **Pick any team:** the visitor can be any team in the demo league, both on the landing card and from the banner.
+- **Not done:** writing anything to the backend (no credential saves or snapshot captures), more than one demo league, other seasons, and a backend-served demo.
+
+## Capture and scrub (scripts, run by hand)
+
+- **`frontend/scripts/capture-demo.ts`**, `npm run capture:demo -- midweek|gameday`, against a local backend, with `LEAGUE_ID`, `ESPN_S2` and `SWID` like `capture:rankings`. It reuses `withRetries` from `capture-helpers.ts` and keeps a short delay between ESPN calls. It never logs cookies.
+  - **Base capture** (both modes): `leagues/teams`, `league`, `draft`, `team` for every team, `matchups`, `player-history` for every rostered and served available player, `available-players` for every starting position, and `player` detail for each of those players. Also the captured-at time and the scoring period.
+  - **Mid-week:** run once on the Wednesday or Thursday before kickoff, after waivers clear.
+  - **Game day:** a base capture on Sunday morning, then a frame every 10 minutes from the first Sunday kickoff until the last Sunday game is final. Each frame holds `matchups` and the `nfl-game` detail for every game that's live, or went final since the last frame. Frames are written as they come, so a crash part-way keeps what it has. The Thursday game is already final and the Monday game still upcoming, both from the base capture.
+  - Raw output goes to a gitignored `frontend/demo-raw/`. It's never committed: it still has the real names.
+- **`frontend/scripts/scrub-demo.ts`**, `npm run scrub:demo`, reads `demo-raw/` and writes `public/demo/`.
+  - Team names, abbreviations and owners map to a fixed set of made-up ones in `scripts/demo-names.ts`, the same in both scenarios. Every string in every file is rewritten, not just the known fields, because names also show up in nested places like matchups and the NFL games' fantasy players.
+  - Uploaded logos (`mystique-api.fantasy.espn.com`) become null, which shows the existing fallback mark. ESPN preset logos are kept.
+  - The league ID is dropped; demo requests use league 0.
+  - It **fails** if any original team name, abbreviation, owner, the league ID, or anything shaped like a SWID or `espn_s2` value survives in the output. A Vitest spec covers that check on a small made-up input.
+  - It minifies the JSON, drops frames where nothing changed, and prints each scenario's total size.
+- **The user OKs the scrubbed output** before it's committed. It's their league's rosters, anonymized.
+
+## Fixture layout
+
+```
+frontend/public/demo/
+  midweek/
+    manifest.json          capturedAt, scoringPeriod, defaultTeamId
+    teams.json  league.json  draft.json  matchups.json
+    team/{teamId}.json
+    player/{playerId}.json
+    history.json           every captured PlayerHistory, as the backend answered
+    available.json         every captured AvailablePlayer
+    nfl-game/{eventId}.json
+  gameday/
+    (the same, from the Sunday-morning capture)
+    frames/index.json      each frame's capturedAt
+    frames/{n}/matchups.json
+    frames/{n}/nfl-game/{eventId}.json
+```
+
+`angular.json` gets a `public/` asset entry; the project has none today. The fixtures are copied to the build but never reach a bundle, and each is fetched only when its request is made.
+
+## Frontend
+
+- **`ClockService`** (new, root): `now(): Date`, the one source of the current time.
+  - Outside the demo it's `new Date()`.
+  - The current reads of `new Date()` move to it: `matchup.component.ts`, `nfl-game.component.ts`, `league.component.ts`, `nfl-game.service.ts`, `week-matchups.service.ts`, and the start/sit clock, which trades also reads. The utils already take `now`, so they don't change.
+  - **Mid-week:** the capture time plus the real time since the demo started, so kickoffs are days away and the trade deadline is where it really was.
+  - **Game day:** a stepped clock. It holds each frame's capture time for one real minute (`DEMO_FRAME_MS`, matching `REFRESH_INTERVAL_MS`), then steps to the next frame. Between steps, "now" matches the data on screen, so no game reads as overdue. The existing auto-refresh then picks up each new frame without any change to it.
+- **`DemoModeService`** (new, root): `active`, `scenario`, `teamId`, the game-day replay start, and `start()`, `switchScenario()`, `switchTeam()`, `skipAhead()`, `restart()` and `exit()`. It loads each scenario's `manifest.json` and `frames/index.json`.
+- **`demoInterceptor`** (functional, registered with `provideHttpClient(withInterceptors([...]))`). While demo mode is on, it answers `${apiBaseUrl}/api/espn/*` from the fixtures. The routing is a pure function, `demoFixturePath(endpoint, body, frame)`, which gets Vitest coverage.
+  - `leagues/teams`, `league` and `draft`: the scenario's file.
+  - `team`: `team/{teamId}.json`.
+  - `matchups` and `nfl-game`: the current frame's file on game day. A game the frame doesn't have is as it was in the latest frame before that has it, or else in the base capture. The base file in mid-week.
+  - `player`: `player/{playerId}.json`. A player outside the capture gets a 404, which shows the drawer's existing "unavailable" state.
+  - `player-history`: `history.json`, filtered to the requested `playerIds`.
+  - `available-players`: `available.json`, filtered to the requested `positions` and cut to `perPosition` each.
+  - Anything else under `/api` (logos, credentials, snapshots) gets an error and never reaches the backend.
+- **Landing card** (`import-team`): a **Try the demo** panel above the import form, with a one-line pitch, the scenario switch, a team picker (default: the manifest's `defaultTeamId`), and a **Start demo** button that opens `/team`. The credentials check on load still runs, but nothing in the demo saves credentials.
+- **Demo banner** (in `app.html`, under the header, only in demo mode): "Demo league", the Mid-week / Game day switch, the team picker, and **Import your own team**.
+  - On game day it also shows the game clock ("Sun 2:40 PM"), **Skip ahead** (30 minutes) and **Restart**.
+  - On phones it collapses to the label, the switch and an overflow menu, with no horizontal scroll at 375px.
+  - The header's **Change team** button opens the import page as usual. Importing a real team ends demo mode.
+- **`TeamStateService` / `LastImport`** gain `demo?: { scenario, startedAt }`. `ImportRestoreService` turns demo mode on before re-importing, so a reload resumes the replay where it was. Exiting forgets the demo entry.
+- **`?demo` link:** read before the restore in the app initializer. It starts the demo, then removes the parameter from the address (`replaceUrl`).
+- Switching scenario or team re-imports through the interceptor and clears the per-league caches the services hold (outlook, week matchups, rankings, histories), as a real **Change team** does.
+
+## Backend
+
+Nothing. The capture uses the existing endpoints.
+
+## Verification
+
+1. `ng build` and Vitest pass. Initial bundle growth is only the interceptor, clock and banner (a few kB); no fixture JSON is in any bundle.
+2. New Vitest specs: the interceptor's routing and filtering, the stepped clock's frame choice, skip-ahead and the end of the replay, and the scrub's leak check.
+3. With the backend **stopped**, the network panel shows no `/api` requests in either scenario.
+4. **Mid-week**, at desktop width and 375px: every tab, the player drawer, an NFL game page, the projections switch and backtest, start/sit, waivers and trades.
+5. **Game day:** games go from upcoming to live to final over the frames, matchup totals and win probability move, the NFL game page refreshes its last play, and Skip ahead and Restart work.
+6. **The flow:** the landing card, a `?demo=gameday&team=3` link, a reload mid-replay, switching scenario and team from the banner, Import your own team, and importing a real league afterwards with no demo data left over.
+7. **Scrub:** a manual read of the output for anything real, on top of the automated check.
+
+## As built so far (2026-10-26): capture and scrub
+
+Built first, so a real Sunday can be recorded on Nov 1. The app side (clock, interceptor, banner) isn't started.
+
+- **Shared:** `src/app/models/demo.model.ts` has `DemoScenario`, `DemoManifest` and `DemoFrame`, for the scripts now and the app later. `capture-helpers.ts` gains `postJson`, the backend call `capture-player-rankings.ts` already had, now shared by both capture scripts.
+- **`scripts/capture-demo.ts`** with its pure parts in `capture-demo-helpers.ts`:
+  - The base capture clears `demo-raw/<scenario>/` first, so captures never mix. A player detail ESPN answers with a 4xx is skipped and counted; an NFL game that fails is skipped with a warning. The raw manifest holds the league id, for the scrub's leak check.
+  - **The game day** is the games kicking off within 18 hours of the earliest game not yet final (`gameDayIds`). So Thursday's final and Monday night are left to the base capture. It waits for the first kickoff, then takes a frame every `FRAME_MINUTES`, timed from the kickoff rather than from the last frame's end.
+  - **A frame** holds the matchups and the detail of each game live then, or seen final for the first time (`frameGameIds`). A frame with the same matchups as the last and no game detail isn't written.
+  - **It stops** when every game of the day is final, or has been "not started" for 6 hours since its kickoff (postponed), or at `MAX_HOURS`. A failed frame is logged and skipped, never fatal.
+  - **Run again, it resumes** after the last frame, but only for the same league, season and week. Anything else fails with a message, rather than adding to or deleting an earlier recording.
+- **`scripts/scrub-demo.ts`** with its pure parts in `scrub-demo-helpers.ts`, and the made-up names in `demo-names.ts`:
+  - **Fantasy teams are found by shape:** any object with a numeric `teamId` and a string `name`. NFL teams carry `proTeamId`, so they're left alone, even when an abbreviation matches (a fantasy team called "BUF"). `owners`, `leagueName` and `logoUrl` are swapped wherever they appear. Logos are kept only from `g.espncdn.com` and `a.espncdn.com`, ESPN's preset packs; anything else, including links to images elsewhere, becomes null.
+  - **The leak check** looks for:
+    - the real team, manager and league names as whole words, ignoring case
+    - any fantasy team whose name or abbreviation isn't a demo one
+    - the league id as a whole number
+    - SWID-shaped and espn_s2-shaped strings, and the cookies by value when `ESPN_S2` and `SWID` are set
+    - `mystique-api`
+
+    Whole words, so a manager called Kevin Smith doesn't flag a player called Kevin Smithers.
+  - `DEMO_TEAM_ID` picks the default team (the lowest id otherwise). Both scenarios must come from the same league.
+  - `frontend/demo-raw/` is gitignored.
+
+### Verification done
+
+- Vitest: 224 tests, 22 of them new. 10 are in `capture-demo-helpers.spec.ts`: the game day's span, frames, stalled games and the end of the day. 12 are in `scrub-demo-helpers.spec.ts`:
+  - consistent names across scenarios
+  - NFL teams sharing an abbreviation left alone
+  - logos
+  - every kind of leak, and no false alarms on a clean scrub
+- The scripts type-check (`tsc` over `scripts/`, outside the app build).
+- **End to end against a mock backend** (6 teams, managers shared between teams, uploaded, preset and outside logos, a fantasy team abbreviated "BUF", one player answering 404):
+  - **Mid-week:** 6 teams, 18 rostered and 6 available players, 23 details (one 404 skipped) and 4 games.
+  - **Game day:** the capture waited for the first kickoff and recorded 7 frames, 3 seconds apart, over two overlapping games. Each game's detail was saved while it was live and once more on going final; then the capture stopped by itself.
+  - **A second run** resumed after frame 6, found no change and stopped. **A run for another season** was refused.
+  - **The scrub:** renamed everything, kept the preset logo and dropped the others. A search of its output for the real names, the league id and `mystique` came up empty. Sizes: mid-week 34 kB (11 kB gzipped), game day 123 kB (23 kB gzipped).
+  - **A planted team name and espn_s2-shaped token** in one frame's game detail: both reported, and nothing written.
+  - The mock output was deleted, not committed.
+- **Not yet:** a capture against ESPN through the real backend.
+
+## Open questions
+
+- Which league and week to capture. The user's own league is the only one with cookies to hand, which is why the scrub matters.
+- The size budget. A guess is ~2 MB for mid-week and up to ~15 MB raw for game day across ~60 frames, compressing to a fraction of that. If it's too much, thin the frames (every 15 minutes, or only frames where a score changed).
+- Whether a minute of real time per 10-minute frame (a ~60-minute Sunday) is the right pace, with Skip ahead for the impatient, or whether the replay should run faster.
+- The player drawer on game day shows the Sunday-morning detail, not the live one. That's probably fine for a demo; capturing every player's detail in each frame would multiply the size.
