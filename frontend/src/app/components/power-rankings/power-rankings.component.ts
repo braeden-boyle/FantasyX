@@ -12,7 +12,8 @@ import { ordinal } from '../../utils/league-format';
 
 // The league's power rankings, in one parent container: a card with this week's ranking (rank,
 // movement since last week, team) that switches to the rest of the season's, and a separate card
-// below with each team's move since draft day as an arrow on a rank track. Rows are static.
+// below with each team's move from draft day to its rest-of-season rank as an arrow on a rank
+// track. Rows are static.
 // Shown under the standings on wide screens, and on its own page (/league/rankings) below
 // that. It reads the shared LeagueOutlookService; the host page decides when the league loads.
 @Component({
@@ -36,6 +37,7 @@ export class PowerRankingsComponent {
 
   protected readonly view = this.outlook.rankings;
   protected readonly restOfSeason = this.outlook.restOfSeason;
+  protected readonly sinceDraft = this.outlook.sinceDraft;
 
   // The first card switches between this week's ranking and the rest of the season's.
   protected readonly modes = [
@@ -60,7 +62,7 @@ export class PowerRankingsComponent {
   }
 
   protected readonly Math = Math;
-  protected readonly teamCount = computed(() => this.view()?.rankings.length ?? 0);
+  protected readonly teamCount = computed(() => this.sinceDraft()?.rankings.length ?? 0);
 
   // Where a rank sits on the draft-day track, as a percentage from the left: last place at 0,
   // 1st at 100.
