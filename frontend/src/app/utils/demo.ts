@@ -9,6 +9,18 @@ import { REFRESH_INTERVAL_MS } from './live-refresh';
 // only be the demo's, and only those are answered from the fixtures.
 export const DEMO_LEAGUE_ID = 0;
 
+// How each scenario is named and pitched, on the landing card and the demo banner.
+export const DEMO_SCENARIO_INFO: Record<DemoScenario, { label: string; description: string }> = {
+  midweek: {
+    label: 'Mid-week',
+    description: 'Before the week’s games: set a lineup, work the waiver wire and weigh up trades.',
+  },
+  gameday: {
+    label: 'Game day',
+    description: 'A real Sunday replayed, a step a minute: live scores, win probability and game updates.',
+  },
+};
+
 // How long each step of the game-day replay lasts, in real time. The same as the matchup view's
 // live refresh, so each refresh lands on the next step.
 export const DEMO_STEP_MS = REFRESH_INTERVAL_MS;

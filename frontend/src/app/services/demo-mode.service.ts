@@ -1,11 +1,11 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Router } from '@angular/router';
-import { Observable, forkJoin, map, of, shareReplay, switchMap, tap } from 'rxjs';
+import { Observable, catchError, forkJoin, map, of, shareReplay, switchMap, tap } from 'rxjs';
 import { EspnApiService } from './espn-api.service';
 import { TeamStateService } from './team-state.service';
-import { DemoFrame, DemoManifest, DemoScenario } from '../models/demo.model';
-import { ImportTeamRequest } from '../models/team.model';
+import { DEMO_SCENARIOS, DemoFrame, DemoManifest, DemoScenario } from '../models/demo.model';
+import { ImportTeamRequest, TeamSummary } from '../models/team.model';
 import {
   DEMO_LEAGUE_ID,
   DemoRoute,
@@ -43,9 +43,12 @@ export class DemoModeService {
 
   private readonly state = signal<DemoState | null>(null);
   private readonly fixtures = new Map<DemoScenario, Observable<ScenarioFixtures>>();
+  private readonly teamLists = new Map<DemoScenario, Observable<TeamSummary[]>>();
 
   readonly active = computed(() => !!this.state() && this.teamState.importRequest()?.leagueId === DEMO_LEAGUE_ID);
   readonly scenario = computed(() => (this.active() ? this.state()!.scenario : null));
+  // The demo team the visitor is, while the demo is on.
+  readonly teamId = computed(() => (this.active() ? this.teamState.importRequest()!.teamId : null));
 
   // The demo clock: mid-week runs on from the capture at real speed, and game day shows the current
   // step's time. Null outside the demo.
@@ -79,11 +82,12 @@ export class DemoModeService {
     return demoRoute(endpoint, body, state.scenario, frame, state.frames);
   }
 
-  // Imports a demo team (the scenario's default when none is given), starting the scenario afresh.
-  start(scenario: DemoScenario, teamId?: number): Observable<void> {
+  // Imports a demo team (the scenario's default when none is given), starting the scenario afresh,
+  // or from startedAt when picking up a saved demo.
+  start(scenario: DemoScenario, teamId?: number, startedAt = Date.now()): Observable<void> {
     return this.load(scenario).pipe(
       switchMap((fixtures) => {
-        this.state.set({ scenario, ...fixtures, startedAt: Date.now() });
+        this.state.set({ scenario, ...fixtures, startedAt });
         const id = teamId !== undefined && fixtures.manifest.teamIds.includes(teamId) ? teamId : fixtures.manifest.defaultTeamId;
         return this.importTeam(id);
       }),
@@ -112,17 +116,18 @@ export class DemoModeService {
     return this.reimport();
   }
 
-  // Leaves the demo for the import page, with no team imported.
+  // Leaves the demo for the import page, with no team imported. It's forgotten, so the next load
+  // brings back the user's own last team, if any.
   exit(): void {
     this.state.set(null);
+    this.teamState.forgetLastDemo();
     if (this.teamState.importRequest()?.leagueId === DEMO_LEAGUE_ID) this.teamState.clear();
     this.router.navigateByUrl('/import');
   }
 
   // Starts the demo from a shared link: ?demo=gameday (or anything else for mid-week) and an
   // optional &team=, on any route. Both are taken off the address before the router reads it, and
-  // a link to the bare site opens the demo on My Team. Returns whether there was a link to follow;
-  // the app holds back its pages until the team is in, as when restoring the last import.
+  // a link to the bare site opens the demo on My Team. Returns whether there was a link to follow.
   startFromLink(): boolean {
     const url = new URL(window.location.href);
     const demo = url.searchParams.get('demo');
@@ -132,19 +137,79 @@ export class DemoModeService {
     url.searchParams.delete('team');
     window.history.replaceState(window.history.state, '', url.pathname + url.search + url.hash);
 
-    const toTeamPage = url.pathname === '/' || url.pathname === '/import';
+    const scenario = demo === 'gameday' ? 'gameday' : 'midweek';
+    this.follow(this.start(scenario, Number.isInteger(team) && team > 0 ? team : undefined), {
+      toTeamPage: url.pathname === '/' || url.pathname === '/import',
+      error: 'Could not load the demo league.',
+    });
+    return true;
+  }
+
+  // Picks the demo up where it was before a page load, if it was on: the same scenario and team,
+  // with the clock and the game-day replay carried on. Returns whether there was a demo to resume.
+  resumeLast(): boolean {
+    const last = this.teamState.lastDemo();
+    if (!last) return false;
+    this.follow(this.start(last.scenario, last.teamId, last.startedAt), {
+      toTeamPage: false,
+      // Its fixtures may have changed or gone; the user's own team comes back on the next load.
+      error: 'Could not reload the demo league.',
+      onError: () => this.teamState.forgetLastDemo(),
+    });
+    return true;
+  }
+
+  // The scenarios with fixtures to show. Game day is only there once a Sunday has been recorded.
+  available(): Observable<DemoScenario[]> {
+    return forkJoin(
+      DEMO_SCENARIOS.map((scenario) =>
+        this.load(scenario).pipe(
+          map(() => [scenario]),
+          catchError(() => of([])),
+        ),
+      ),
+    ).pipe(map((found) => found.flat()));
+  }
+
+  // A scenario's manifest, for the team a visitor starts as.
+  manifest(scenario: DemoScenario): Observable<DemoManifest> {
+    return this.load(scenario).pipe(map((fixtures) => fixtures.manifest));
+  }
+
+  // The demo league's teams, for the team pickers. Both scenarios are the same league.
+  teams(scenario: DemoScenario): Observable<TeamSummary[]> {
+    let teams = this.teamLists.get(scenario);
+    if (!teams) {
+      teams = this.http.get<TeamSummary[]>(`demo/${scenario}/teams.json`).pipe(shareReplay(1));
+      this.teamLists.set(scenario, teams);
+    }
+    return teams;
+  }
+
+  // Real milliseconds until the game-day replay's next step: null on its last step, and outside
+  // game day.
+  nextStepIn(): number | null {
+    const state = this.activeState();
+    if (state?.scenario !== 'gameday') return null;
+    return msUntilNextStep(state.frames.length + 1, state.startedAt, Date.now());
+  }
+
+  // Runs a demo start on page load, holding the app's pages back until the team is in, as when
+  // restoring the last import.
+  private follow(start: Observable<void>, options: { toTeamPage: boolean; error: string; onError?: () => void }): void {
     this.teamState.restoring.set(true);
-    this.start(demo === 'gameday' ? 'gameday' : 'midweek', Number.isInteger(team) && team > 0 ? team : undefined).subscribe({
+    start.subscribe({
       next: () => {
         this.teamState.restoring.set(false);
-        if (toTeamPage) this.router.navigateByUrl('/team');
+        if (options.toTeamPage) this.router.navigateByUrl('/team');
       },
       error: () => {
-        this.teamState.restoreError.set('Could not load the demo league.');
+        this.state.set(null);
+        options.onError?.();
+        this.teamState.restoreError.set(options.error);
         this.teamState.restoring.set(false);
       },
     });
-    return true;
   }
 
   private activeState(): DemoState | null {
@@ -163,7 +228,10 @@ export class DemoModeService {
     if (!state) throw new Error('No demo scenario has been started.');
     const request: ImportTeamRequest = { leagueId: DEMO_LEAGUE_ID, season: state.manifest.season, teamId };
     return this.espnApi.getTeam(request).pipe(
-      tap((team) => this.teamState.setTeam(team, request)),
+      tap((team) => {
+        this.teamState.setTeam(team, request);
+        this.teamState.rememberDemo({ scenario: state.scenario, teamId, startedAt: state.startedAt });
+      }),
       map(() => undefined),
     );
   }

@@ -1689,7 +1689,38 @@ The app's demo plumbing, reachable for now only through a `?demo` link. The land
   - **`/matchup?demo=gameday&team=4`** stayed on Matchup as Hail Mary Heroes, on the morning step. About a minute later it refreshed by itself onto frame 0: games live at Q2, totals up to 25.2, "3 live".
   - **An NFL game** opened from the strip loaded from `frames/0/nfl-game/<id>.json`.
   - **Network:** no ESPN calls in either scenario. The only backend call was the credentials lookup while the import page was open. Console errors were only 404s on ESPN headshots for the mock's made-up player ids.
-- **Not checked yet:** skip ahead, restart, switching team, and exit, which have no UI yet. Also the drawer, rankings and advice pages, which need real fixtures, since the mock's player details and histories are too thin.
+- **Not checked yet:** skip ahead, restart, switching team, and exit, which have no UI yet. Also the drawer, rankings and advice pages, which need real fixtures, since the mock's player details and histories are too thin. (The controls are checked in the next section.)
+
+## As built so far (2026-10-26): landing card, banner, and keeping the demo across a reload
+
+- **Changed from the plan: the demo is saved under its own key**, `fantasyx.lastDemo` (`LastDemo`: scenario, team, `startedAt`), not as part of the last import.
+  - The user's own last import stays as it was, so it comes back after they leave the demo.
+  - Importing a real team forgets the saved demo, in `TeamStateService.setTeam`. **Import your own team** forgets it too.
+  - On load the app initializer tries, in order: a `?demo` link, the saved demo (`DemoModeService.resumeLast`), then the last import.
+  - The saved `startedAt` means the mid-week clock and the game-day replay carry on rather than restart. A replay that ran out while away shows its last step, and Restart is there for that.
+  - If the saved demo fails to load (its fixtures changed or went), it's forgotten and the import page says so. The user's own team comes back on the next load.
+- **Scenarios only show when their fixtures exist.** `DemoModeService.available()` tries each scenario's manifest. The card and banner grey out a scenario that's missing, such as game day between the mid-week capture and the Sunday recording. A host that answers a missing file with the app's page fails to parse as JSON, so it counts as missing too. Their names and one-line pitches are `DEMO_SCENARIO_INFO` in `utils/demo.ts`.
+- **Landing card** (top of the import page, shown once a scenario exists): a short pitch, a **Start at** Mid-week / Game day switch with the pitch for the one picked, **Your team** (defaulting to the manifest's team), and **Start the demo**, which opens My Team. While in the demo it starts on the current scenario and team.
+- **Demo banner** (`components/demo-banner`, under the header while the demo is on):
+  - "Demo league", the scenario switch, the team picker, and on game day the clock ("Sun 2:40 PM", with "· Final" once the replay's over), **Skip ahead** (30 minutes) and **Restart**. **Import your own team** is at the end.
+  - Switching scenario keeps the team. Switching team keeps the clock. Controls are disabled while a change loads, and a failed change shows a line under the banner.
+  - **From 1024px up** everything is on one line. **From 640px** the clock sits beside the switch and the rest is in a "…" popover. **On phones** the clock moves into the popover too. The clock is read every 5 seconds.
+  - The header's **Change team** still opens the import page, with the demo still on.
+
+### Verification done
+
+- `ng build` passes, and Vitest's 234 tests pass. The initial bundle is 183.7 kB over the warning, against 167.9 kB before demo mode: about +16 kB raw for the whole feature so far.
+- **In the browser, with mock-backend fixtures** (deleted afterwards):
+  - **The card:** both scenarios, the pitch changing with the switch, and the default team. Starting as Game day and Hail Mary Heroes opened My Team as them, with `lastDemo` saved and no last import written.
+  - **The banner, at three widths:** one line at 1280px. Clock and "…" at 800px. Label, switch and "…" at 375px, where the popover holds the team picker, clock, Skip ahead, Restart and Import your own team, and nothing overflows the page.
+  - **Skip ahead:** jumped to the last step (the mock's frames are seconds apart), showed "· Final", and My Team took its points from that frame.
+  - **A full page load to `/league`** brought the demo back at the same step, scenario and team.
+  - **Restart** cleared "Final".
+  - **Switching team** moved the standings highlight and kept `startedAt`.
+  - **Switching to Mid-week** kept the team and dropped the game-day controls.
+  - **Import your own team** went to the import page with no banner or tabs and forgot the demo. A reload then stayed out of it.
+  - **With the game-day manifest hidden,** Game day was disabled on the card.
+- **Not checked:** importing a real team from inside the demo, which needs the backend and ESPN. The rest of the pages wait for real fixtures, as before.
 
 ## Open questions
 

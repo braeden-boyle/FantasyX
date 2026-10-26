@@ -7,11 +7,13 @@ import { ButtonModule } from 'primeng/button';
 import { ProgressSpinnerModule } from 'primeng/progressspinner';
 import { TeamStateService } from './services/team-state.service';
 import { SettingsMenuComponent } from './components/settings-menu/settings-menu.component';
+import { DemoBannerComponent } from './components/demo-banner/demo-banner.component';
+import { DemoModeService } from './services/demo-mode.service';
 
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [RouterOutlet, TabsModule, ButtonModule, ProgressSpinnerModule, SettingsMenuComponent],
+  imports: [RouterOutlet, TabsModule, ButtonModule, ProgressSpinnerModule, SettingsMenuComponent, DemoBannerComponent],
   templateUrl: './app.html',
   styleUrl: './app.css',
 })
@@ -24,6 +26,8 @@ export class App {
   // The tabs only make sense once a team (and its league context) has been imported.
   protected readonly hasTeam = this.teamState.team;
   protected readonly restoring = this.teamState.restoring;
+  // The demo banner shows while the demo league is the imported one.
+  protected readonly demoActive = inject(DemoModeService).active;
 
   // The header supplies the bottom rule, so the tab list drops its own border and background.
   protected readonly tabsTokens = { tablist: { background: 'transparent', borderWidth: '0' } };

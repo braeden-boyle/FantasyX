@@ -22,10 +22,11 @@ export const appConfig: ApplicationConfig = {
     // The demo league's requests are answered from its fixtures.
     provideHttpClient(withInterceptors([demoInterceptor])),
     provideAnimationsAsync(),
-    // Opens the demo from a ?demo link, or else reloads the last imported team after a refresh;
-    // neither holds up startup.
+    // Opens the demo from a ?demo link, or else picks up the demo or reloads the last imported team
+    // after a refresh; none of them holds up startup.
     provideAppInitializer(() => {
-      if (!inject(DemoModeService).startFromLink()) inject(ImportRestoreService).restore();
+      const demo = inject(DemoModeService);
+      if (!demo.startFromLink() && !demo.resumeLast()) inject(ImportRestoreService).restore();
     }),
     providePrimeNG({
       theme: {

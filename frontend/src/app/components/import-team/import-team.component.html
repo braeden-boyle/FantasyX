@@ -4,6 +4,53 @@
       Couldn't reload your last team: {{ restoreError }}
     </p-message>
   }
+  @if (demoScenario()) {
+    <p-panel header="Try the demo">
+      <div class="flex flex-col gap-4">
+        <p class="text-sm text-surface-500">
+          No ESPN league to hand? Look around a real league's season, with its teams and managers renamed.
+        </p>
+        <div class="flex flex-col gap-1.5">
+          <span id="demoScenario" class="text-sm font-medium">Start at</span>
+          <p-selectbutton
+            [options]="demoScenarioOptions()"
+            [ngModel]="demoScenario()"
+            (ngModelChange)="demoScenario.set($event)"
+            [allowEmpty]="false"
+            optionLabel="label"
+            optionValue="value"
+            optionDisabled="disabled"
+            ariaLabelledBy="demoScenario"
+          />
+          <p class="text-xs text-surface-500">{{ demoDescription() }}</p>
+        </div>
+        <div>
+          <label class="block mb-1 text-sm font-medium" for="demoTeam">Your team</label>
+          <p-select
+            inputId="demoTeam"
+            [options]="demoTeams()"
+            [ngModel]="demoTeamId()"
+            (ngModelChange)="demoTeamId.set($event)"
+            optionLabel="name"
+            optionValue="teamId"
+            placeholder="Pick a team"
+            styleClass="w-full"
+          />
+        </div>
+        @if (demoError()) {
+          <p-message severity="error" [text]="demoError()!" />
+        }
+        <p-button
+          label="Start the demo"
+          icon="pi pi-play"
+          type="button"
+          [loading]="startingDemo()"
+          [disabled]="!demoTeamId()"
+          (onClick)="startDemo()"
+        />
+      </div>
+    </p-panel>
+  }
   <p-panel header="Import your ESPN fantasy team">
     <form [formGroup]="form" class="flex flex-col gap-4">
       <div class="flex gap-4">
