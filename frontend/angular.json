@@ -19,7 +19,8 @@
             "tsConfig": "tsconfig.app.json",
             "webWorkerTsConfig": "tsconfig.worker.json",
             "styles": ["src/styles.css"],
-            "scripts": []
+            "scripts": [],
+            "assets": [{ "glob": "**/*", "input": "public" }]
           },
           "configurations": {
             "production": {

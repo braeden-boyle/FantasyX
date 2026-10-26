@@ -1,5 +1,6 @@
 import { Injectable, computed, signal } from '@angular/core';
 import { ImportTeamRequest, Team } from '../models/team.model';
+import { DEMO_LEAGUE_ID } from '../utils/demo';
 
 const LAST_IMPORT_KEY = 'fantasyx.lastImport';
 
@@ -33,12 +34,21 @@ export class TeamStateService {
     this.team.set(team);
     this.importRequest.set(request);
     this.restoreError.set(null);
+    // The demo league isn't remembered as the last import, so the user's own team still comes back
+    // on the next load.
+    if (request.leagueId === DEMO_LEAGUE_ID) return;
     this.writeLastImport({
       leagueId: request.leagueId,
       season: request.season,
       teamId: request.teamId,
       isPrivate: !!request.espnS2 && !!request.swid,
     });
+  }
+
+  // Back to no team, as before the first import (leaving the demo). The last import is kept.
+  clear(): void {
+    this.team.set(null);
+    this.importRequest.set(null);
   }
 
   lastImport(): LastImport | null {

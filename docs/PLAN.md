@@ -1647,6 +1647,50 @@ Built first, so a real Sunday can be recorded on Nov 1. The app side (clock, int
   - The mock output was deleted, not committed.
 - **Not yet:** a capture against ESPN through the real backend.
 
+## As built so far (2026-10-26): clock, demo service and interceptor
+
+The app's demo plumbing, reachable for now only through a `?demo` link. The landing card, banner and restoring the demo on reload come next.
+
+- **Changed from the plan: the interceptor only answers league 0.** `DEMO_LEAGUE_ID` is 0, which no ESPN league has. Only `/api/espn/*` requests for it are answered from the fixtures; everything else goes to the backend as usual.
+  - So a real import started while in the demo can never get demo data.
+  - The import page's saved-credentials lookup still works, so it can still fill in a private league's details.
+  - "No `/api` calls in demo mode" now means no ESPN calls. The one backend call is that lookup, made only when the import page is open.
+  - `DemoModeService.active` is simply "the imported league is the demo's". Importing a real team ends the demo with no extra code.
+- **`utils/demo.ts`** (pure, Vitest): `demoRoute` maps each endpoint and body to a fixture path, plus a `select` that cuts a shared file down to what was asked for (history by `playerIds`, available players by `positions` and `perPosition`). Ids must be digits, so a request body can't reach other paths. It also holds the replay's step arithmetic.
+- **Game day, as built:**
+  - **Step 0 is the Sunday-morning capture**, and each later step shows one frame. Each step lasts `DEMO_STEP_MS`, which equals `REFRESH_INTERVAL_MS`.
+  - **On a frame, a team comes from that frame's matchups**, not `team/<id>.json`, so My Team's points match the matchup view's.
+  - **A game is from the latest frame up to now that has it**, else the morning capture.
+- **`ClockService.now()`** replaces `new Date()` in the matchup, NFL game and league pages, `WeekMatchupsService` and `NflGameService`, and the start/sit clock.
+  - The start/sit clock is now computed. It's read again on each one-minute tick and on each new import, so it never shows the real time for a minute after the demo starts.
+  - `ClockService.refreshDelay(delay)` turns a live-refresh delay into real time. During the replay, a refresh comes at each step, since the clock only moves between steps.
+- **`DemoModeService`:**
+  - `start(scenario, teamId?)`, `switchTeam`, `skipAhead(minutes)`, `restart()`, `exit()` and `startFromLink()`.
+  - Skip ahead and restart re-import the team. The new import request resets every per-league cache, so the pages refetch as the replay now stands.
+  - Demo imports aren't written to the last-import entry, so your own team still comes back after a reload. Keeping the demo across a reload is still to do.
+  - `TeamStateService.clear()` is new, for `exit()`.
+- **`?demo` / `?demo=gameday`, with `&team=`:**
+  - Read in the app initializer, ahead of the usual restore, and taken off the address before the router reads it.
+  - A link to `/` or `/import` lands on `/team`; any other route is kept.
+  - The app holds back its pages while the team loads, as with a restore.
+- **`angular.json`** serves `public/` as static files. Initial bundle: +6.1 kB raw (about +1.5 kB transferred). The build was already 167.9 kB over the 1.5 MB warning before this, and is 174.0 kB over now.
+
+### Verification done
+
+- `ng build` passes. Vitest: 234 tests, 10 of them new in `utils/demo.spec.ts`:
+  - fixture paths per endpoint and frame
+  - a team taken from a frame's matchups
+  - a game falling back to an earlier frame
+  - history and available players cut down
+  - rejected ids and endpoints
+  - the replay's steps, countdown, end and skip ahead
+- **In the browser, with mock-backend fixtures** (`frontend-demo` in `.claude/launch.json`, port 4300; the fixtures were deleted afterwards):
+  - **`/?demo`** landed on My Team as Gridiron Gnomes, then League (renamed teams and managers) and Matchup ("3 to play" by the demo clock) through the tabs.
+  - **`/matchup?demo=gameday&team=4`** stayed on Matchup as Hail Mary Heroes, on the morning step. About a minute later it refreshed by itself onto frame 0: games live at Q2, totals up to 25.2, "3 live".
+  - **An NFL game** opened from the strip loaded from `frames/0/nfl-game/<id>.json`.
+  - **Network:** no ESPN calls in either scenario. The only backend call was the credentials lookup while the import page was open. Console errors were only 404s on ESPN headshots for the mock's made-up player ids.
+- **Not checked yet:** skip ahead, restart, switching team, and exit, which have no UI yet. Also the drawer, rankings and advice pages, which need real fixtures, since the mock's player details and histories are too thin.
+
 ## Open questions
 
 - Which league and week to capture. The user's own league is the only one with cookies to hand, which is why the scrub matters.

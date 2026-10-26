@@ -1,6 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { Observable, map, of, tap, throwError } from 'rxjs';
 import { EspnApiService } from './espn-api.service';
+import { ClockService } from './clock.service';
 import { TeamStateService } from './team-state.service';
 import { ImportTeamRequest, NflGameDetail } from '../models/team.model';
 
@@ -19,6 +20,7 @@ export interface LoadedNflGame {
 export class NflGameService {
   private readonly espnApi = inject(EspnApiService);
   private readonly teamState = inject(TeamStateService);
+  private readonly clock = inject(ClockService);
 
   private readonly cache = new Map<string, LoadedNflGame>();
   private cachedFor: ImportTeamRequest | null = null;
@@ -44,7 +46,7 @@ export class NflGameService {
     return this.espnApi
       .getNflGame({ leagueId, season, espnS2, swid, scoringPeriod, eventId })
       .pipe(
-        map((detail) => ({ detail, fetchedAt: new Date() })),
+        map((detail) => ({ detail, fetchedAt: this.clock.now() })),
         tap((loaded) => this.cache.set(key, loaded)),
       );
   }
