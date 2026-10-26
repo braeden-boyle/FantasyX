@@ -6,12 +6,6 @@
   border-bottom: 1px solid var(--p-content-border-color);
 }
 
-/* The header supplies the bottom rule, so the tab list drops its own border and background. */
-.app-header ::ng-deep .p-tablist-tab-list {
-  border-bottom: none;
-  background: transparent;
-}
-
 /* Icon-only on phones, like the tabs, so the header fits on one line. The icon-only tabs also
    narrow, so all five fit beside the title at 375px. */
 @media (max-width: 639.98px) {
