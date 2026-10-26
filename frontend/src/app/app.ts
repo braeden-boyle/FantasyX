@@ -25,6 +25,9 @@ export class App {
   protected readonly hasTeam = this.teamState.team;
   protected readonly restoring = this.teamState.restoring;
 
+  // The header supplies the bottom rule, so the tab list drops its own border and background.
+  protected readonly tabsTokens = { tablist: { background: 'transparent', borderWidth: '0' } };
+
   protected readonly tabs = [
     { route: '/team', label: 'My Team', icon: 'pi pi-user' },
     { route: '/matchup', label: 'Matchup', icon: 'pi pi-bolt' },

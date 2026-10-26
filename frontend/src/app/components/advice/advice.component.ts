@@ -13,7 +13,7 @@ import { TagModule } from 'primeng/tag';
   imports: [RouterOutlet, TabsModule, TagModule],
   template: `
     <div class="max-w-4xl mx-auto mt-6 px-4">
-      <p-tabs [value]="active()" (valueChange)="navigate($event)" [scrollable]="true">
+      <p-tabs [value]="active()" (valueChange)="navigate($event)" [dt]="tabsTokens">
         <p-tablist>
           @for (tool of tools; track tool.route) {
             <p-tab [value]="tool.route" [disabled]="!tool.ready" class="flex items-center !gap-2">
@@ -34,15 +34,13 @@ import { TagModule } from 'primeng/tag';
     :host {
       display: block;
     }
-
-    /* The tab row sits on the page, like the header's. */
-    :host ::ng-deep .p-tablist-tab-list {
-      background: transparent;
-    }
   `,
 })
 export class AdviceComponent {
   private readonly router = inject(Router);
+
+  // The tab row sits on the page, like the header's.
+  protected readonly tabsTokens = { tablist: { background: 'transparent' } };
 
   protected readonly tools = [
     { route: '/advice/start-sit', label: 'Start/Sit', icon: 'pi pi-sort-alt', ready: true },

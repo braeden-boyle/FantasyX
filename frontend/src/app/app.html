@@ -2,7 +2,7 @@
   <nav class="max-w-6xl mx-auto px-4 flex items-center gap-3 sm:gap-6">
     <span class="font-semibold text-lg py-3">{{ title }}</span>
     @if (hasTeam()) {
-      <p-tabs [value]="activeTab()" (valueChange)="navigate($event)" class="self-end">
+      <p-tabs [value]="activeTab()" (valueChange)="navigate($event)" [dt]="tabsTokens" class="self-end">
         <p-tablist>
           @for (tab of tabs; track tab.route) {
             <p-tab [value]="tab.route" class="flex items-center !gap-2" [attr.aria-label]="tab.label">
