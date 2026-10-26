@@ -1522,6 +1522,7 @@ Let a visitor who's curious about FantasyX, but has no ESPN league to hand (or d
   - **Mid-week:** last week's games are final and this week's haven't kicked off. This is the scenario for start/sit, waivers and trades.
   - **Game day:** a recorded replay of a real Sunday. Games go from upcoming to live to final, with real scores, last plays and box scores, and the matchup view's win probability moves with them.
 - **Game day is recorded, not simulated.** A capture run during a real Sunday saves the matchups and each NFL game's detail every ~10 minutes. The demo plays those frames back on a demo clock. It can only be captured on a game day; the next one is Sunday, Nov 1.
+  - **Captured once, never refreshed (confirmed 2026-10-26).** The demo is a frozen snapshot of one week, so it's one ~5-minute mid-week run and one Sunday with the capturing computer on, and that's all. Generating the game day from a mid-week snapshot, or faking the whole league, were turned down in favour of real data.
 - **Served from frontend fixtures.** JSON files under `frontend/public/demo/`, answered by an HTTP interceptor while demo mode is on. In demo mode the app makes no `/api` calls at all.
 - **Behaviour once it's on:**
   - **Banner + exit:** a slim banner under the header says it's a demo league. It holds the scenario switch, the team picker, and an **Import your own team** action that leaves demo mode.
