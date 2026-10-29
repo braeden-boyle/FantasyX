@@ -30,6 +30,9 @@
     </div>
   </nav>
 </header>
+@if (demoActive()) {
+  <app-demo-banner />
+}
 
 <!-- Held back while the last team is restored, so pages don't flash "No team imported yet". -->
 @if (restoring()) {

@@ -1,6 +1,7 @@
 import { Injectable, inject, signal } from '@angular/core';
 import { Observable, shareReplay, tap, throwError } from 'rxjs';
 import { EspnApiService } from './espn-api.service';
+import { ClockService } from './clock.service';
 import { TeamStateService } from './team-state.service';
 import { ImportTeamRequest, WeekMatchups } from '../models/team.model';
 
@@ -11,6 +12,7 @@ import { ImportTeamRequest, WeekMatchups } from '../models/team.model';
 export class WeekMatchupsService {
   private readonly espnApi = inject(EspnApiService);
   private readonly teamState = inject(TeamStateService);
+  private readonly clock = inject(ClockService);
 
   private cachedFor: ImportTeamRequest | null = null;
   private cached: Observable<WeekMatchups> | null = null;
@@ -32,7 +34,7 @@ export class WeekMatchupsService {
       // shareReplay replays the loaded week to later subscribers (and shares one in-flight
       // request), but resets on error, so a failed load is retried on the next subscribe.
       this.cached = this.espnApi.getWeekMatchups({ leagueId, season, espnS2, swid }).pipe(
-        tap(() => this.fetchedAtSignal.set(new Date())),
+        tap(() => this.fetchedAtSignal.set(this.clock.now())),
         shareReplay(1),
       );
     }

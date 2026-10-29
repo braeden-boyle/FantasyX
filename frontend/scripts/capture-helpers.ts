@@ -32,6 +32,30 @@ export class HttpError extends Error {
   }
 }
 
+// POSTs body as JSON to the backend at apiUrl and returns the parsed answer, or throws an HttpError.
+// Shared by the capture scripts; the only part here that touches the network.
+export async function postJson<T>(
+  apiUrl: string,
+  path: string,
+  body: unknown,
+  headers: Record<string, string> = {},
+): Promise<T> {
+  const response = await fetch(`${apiUrl}${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...headers },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) {
+    // The backend's problem titles never echo cookies back, so they're safe to log.
+    const title = await response
+      .json()
+      .then((problem: { title?: string }) => problem.title)
+      .catch(() => undefined);
+    throw new HttpError(response.status, `${path} answered ${response.status}${title ? `: ${title}` : ''}`);
+  }
+  return (await response.json()) as T;
+}
+
 // Network failures and 5xx answers (ESPN errors come back as 502) are worth another try; a 4xx,
 // such as expired cookies or a bad league id, isn't.
 export function isRetryable(error: unknown): boolean {

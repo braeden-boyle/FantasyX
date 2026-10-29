@@ -8,6 +8,7 @@ import { MessageModule } from 'primeng/message';
 import { ProgressSpinnerModule } from 'primeng/progressspinner';
 import { TabsModule } from 'primeng/tabs';
 import { TagModule } from 'primeng/tag';
+import { ClockService } from '../../services/clock.service';
 import { TeamStateService } from '../../services/team-state.service';
 import { WeekMatchupsService } from '../../services/week-matchups.service';
 import { LoadedNflGame, NflGameService } from '../../services/nfl-game.service';
@@ -93,6 +94,7 @@ const HIDDEN_COLUMNS: Record<string, string[]> = {
 })
 export class NflGameComponent {
   protected readonly teamState = inject(TeamStateService);
+  private readonly clock = inject(ClockService);
   private readonly weekMatchupsService = inject(WeekMatchupsService);
   private readonly nflGameService = inject(NflGameService);
   protected readonly projections = inject(ProjectionsService);
@@ -152,7 +154,7 @@ export class NflGameComponent {
           map((loaded): GameLoad => ({ eventId, loaded, error: null, pending: false })),
           catchError((err) => {
             if (silent) {
-              this.autoRefreshFailedAt.set(new Date());
+              this.autoRefreshFailedAt.set(this.clock.now());
               return of<GameLoad>({ eventId, loaded: null, error: null, pending: false, silentFailure: true });
             }
             return of<GameLoad>({
@@ -178,7 +180,7 @@ export class NflGameComponent {
   );
 
   protected readonly detail = computed(() => this.gameLoad()?.loaded?.detail ?? null);
-  private readonly fetchedAt = computed(() => this.gameLoad()?.loaded?.fetchedAt ?? new Date());
+  private readonly fetchedAt = computed(() => this.gameLoad()?.loaded?.fetchedAt ?? this.clock.now());
 
   protected readonly loading = computed(() => {
     if (!this.teamState.importRequest()) return false;
@@ -200,7 +202,7 @@ export class NflGameComponent {
   protected readonly teamsOnBye = computed(() => this.week()?.teamsOnBye ?? []);
   protected readonly stripAsOf = computed(() => {
     this.week();
-    return this.weekMatchupsService.fetchedAt() ?? new Date();
+    return this.weekMatchupsService.fetchedAt() ?? this.clock.now();
   });
   protected readonly stripLinkTeam = computed(() => (this.team() === undefined ? null : Number(this.team())));
 
@@ -315,9 +317,9 @@ export class NflGameComponent {
       const { detail, fetchedAt } = load.loaded;
       const failedAt = this.autoRefreshFailedAt();
       const lastAttempt = failedAt && failedAt > fetchedAt ? failedAt : fetchedAt;
-      const delay = nextRefreshDelay([], lastAttempt, new Date(), [detail.game], GAME_REFRESH_INTERVAL_MS);
+      const delay = nextRefreshDelay([], lastAttempt, this.clock.now(), [detail.game], GAME_REFRESH_INTERVAL_MS);
       if (delay === null) return;
-      const timer = setTimeout(() => this.autoRefresh(), delay);
+      const timer = setTimeout(() => this.autoRefresh(), this.clock.refreshDelay(delay));
       onCleanup(() => clearTimeout(timer));
     });
 

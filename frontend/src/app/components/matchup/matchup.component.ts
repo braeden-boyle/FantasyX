@@ -12,6 +12,7 @@ import { ProgressSpinnerModule } from 'primeng/progressspinner';
 import { SkeletonModule } from 'primeng/skeleton';
 import { TagModule } from 'primeng/tag';
 import { TooltipModule } from 'primeng/tooltip';
+import { ClockService } from '../../services/clock.service';
 import { TeamStateService } from '../../services/team-state.service';
 import { WeekMatchupsService } from '../../services/week-matchups.service';
 import { PlayerDetailService } from '../../services/player-detail.service';
@@ -89,6 +90,7 @@ interface WeekLoad {
 })
 export class MatchupComponent {
   protected readonly teamState = inject(TeamStateService);
+  private readonly clock = inject(ClockService);
   private readonly weekMatchupsService = inject(WeekMatchupsService);
   private readonly playerDetail = inject(PlayerDetailService);
   protected readonly projections = inject(ProjectionsService);
@@ -126,7 +128,7 @@ export class MatchupComponent {
           map((week): WeekLoad => ({ week, error: null, pending: false })),
           catchError((err) => {
             if (silent) {
-              this.autoRefreshFailedAt.set(new Date());
+              this.autoRefreshFailedAt.set(this.clock.now());
               return of<WeekLoad>({ week: null, error: null, pending: false, silentFailure: true });
             }
             return of<WeekLoad>({ week: null, error: err?.error?.title ?? 'Could not load the matchups.', pending: false });
@@ -175,7 +177,7 @@ export class MatchupComponent {
   // When the scores were fetched, so in-progress games are judged against the same moment.
   protected readonly scoresAsOf = computed(() => {
     this.week();
-    return this.weekMatchupsService.fetchedAt() ?? new Date();
+    return this.weekMatchupsService.fetchedAt() ?? this.clock.now();
   });
 
   // Every starter in the week, since the switcher shows every matchup's score.
@@ -281,9 +283,9 @@ export class MatchupComponent {
       const failedAt = this.autoRefreshFailedAt();
       const lastAttempt = failedAt && failedAt > fetchedAt ? failedAt : fetchedAt;
       // NFL games count too, so the strip stays current for a game no starter in the league plays in.
-      const delay = nextRefreshDelay(this.weekStarters(), lastAttempt, new Date(), this.nflGames());
+      const delay = nextRefreshDelay(this.weekStarters(), lastAttempt, this.clock.now(), this.nflGames());
       if (delay === null) return;
-      const timer = setTimeout(() => this.autoRefresh(), delay);
+      const timer = setTimeout(() => this.autoRefresh(), this.clock.refreshDelay(delay));
       onCleanup(() => clearTimeout(timer));
     });
 

@@ -10,6 +10,7 @@ import { MessageModule } from 'primeng/message';
 import { ButtonModule } from 'primeng/button';
 import { TooltipModule } from 'primeng/tooltip';
 import { SkeletonModule } from 'primeng/skeleton';
+import { ClockService } from '../../services/clock.service';
 import { TeamStateService } from '../../services/team-state.service';
 import { LeagueOutlookService } from '../../services/league-outlook.service';
 import { ProjectionsService } from '../../services/projections.service';
@@ -44,6 +45,7 @@ import { involves, mineFirst, ordinal } from '../../utils/league-format';
 })
 export class LeagueComponent {
   protected readonly teamState = inject(TeamStateService);
+  private readonly clock = inject(ClockService);
   protected readonly outlook = inject(LeagueOutlookService);
   private readonly router = inject(Router);
   private readonly projections = inject(ProjectionsService);
@@ -58,7 +60,7 @@ export class LeagueComponent {
   // When the scores were fetched, so in-progress games are judged against the same moment.
   private readonly scoresAsOf = computed(() => {
     this.league();
-    return new Date();
+    return this.clock.now();
   });
 
   private readonly standingsById = computed(

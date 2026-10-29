@@ -4,6 +4,7 @@ import { catchError, map, of, scan, startWith, switchMap } from 'rxjs';
 import { LeagueOutlookService } from './league-outlook.service';
 import { PlayerRankingsService } from './player-rankings.service';
 import { ProjectionsService } from './projections.service';
+import { ClockService } from './clock.service';
 import { TeamStateService } from './team-state.service';
 import { WeekMatchupsService } from './week-matchups.service';
 import { MatchupTeam, WeekMatchups } from '../models/team.model';
@@ -38,6 +39,7 @@ export interface WinChange {
 @Injectable({ providedIn: 'root' })
 export class StartSitService {
   private readonly teamState = inject(TeamStateService);
+  private readonly clockService = inject(ClockService);
   private readonly weekMatchups = inject(WeekMatchupsService);
   private readonly outlook = inject(LeagueOutlookService);
   private readonly projections = inject(ProjectionsService);
@@ -47,11 +49,17 @@ export class StartSitService {
   private readonly reloads = signal(0);
   private forceNext = false;
 
-  private readonly clock = signal(new Date());
+  private readonly ticks = signal(0);
   private clockRunning = false;
-  // The time locks are checked against, ticking every minute once advice is wanted. Waiver advice
-  // shares it, along with this service's week.
-  readonly now = this.clock.asReadonly();
+  // The time locks are checked against, ticking every minute once advice is wanted, and read again
+  // on a new import (the demo league runs on its own clock). Waiver advice shares it, along with
+  // this service's week.
+  private readonly clock = computed(() => {
+    this.ticks();
+    this.teamState.importRequest();
+    return this.clockService.now();
+  });
+  readonly now = this.clock;
 
   // Loads the advice from the cached week, if it isn't already (the roster hint).
   ensureLoaded(): void {
@@ -83,7 +91,7 @@ export class StartSitService {
   private startClock(): void {
     if (this.clockRunning) return;
     this.clockRunning = true;
-    setInterval(() => this.clock.set(new Date()), CLOCK_TICK_MS);
+    setInterval(() => this.ticks.update((n) => n + 1), CLOCK_TICK_MS);
   }
 
   private readonly weekRequest = computed(() => {

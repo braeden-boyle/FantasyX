@@ -4,6 +4,73 @@
       Couldn't reload your last team: {{ restoreError }}
     </p-message>
   }
+  @if (demoScenario()) {
+    <section class="demo-card" aria-labelledby="demoHeading">
+      <div class="flex flex-col gap-4">
+        <div class="flex flex-col gap-2">
+          <span class="demo-badge"><i class="pi pi-eye" aria-hidden="true"></i>Demo</span>
+          <h2 id="demoHeading" class="m-0 text-2xl font-semibold leading-tight">See FantasyX in action</h2>
+          <p class="m-0 text-sm text-surface-500">
+            No ESPN league to hand? Look around a real league's season, with its teams and managers renamed. No
+            account or cookies needed.
+          </p>
+        </div>
+
+        <ul class="demo-features" aria-label="What the demo shows">
+          @for (feature of demoFeatures; track feature.label) {
+            <li><i [class]="feature.icon" aria-hidden="true"></i>{{ feature.label }}</li>
+          }
+        </ul>
+
+        <div class="flex flex-col sm:flex-row gap-4">
+          <div class="flex flex-col gap-1.5 shrink-0">
+            <span id="demoScenario" class="text-sm font-medium">Start at</span>
+            <p-selectbutton
+              [options]="demoScenarioOptions()"
+              [ngModel]="demoScenario()"
+              (ngModelChange)="demoScenario.set($event)"
+              [allowEmpty]="false"
+              optionLabel="label"
+              optionValue="value"
+              optionDisabled="disabled"
+              ariaLabelledBy="demoScenario"
+            />
+          </div>
+          <div class="flex flex-col gap-1.5 flex-1 min-w-0">
+            <label class="text-sm font-medium" for="demoTeam">Your team</label>
+            <p-select
+              inputId="demoTeam"
+              [options]="demoTeams()"
+              [ngModel]="demoTeamId()"
+              (ngModelChange)="demoTeamId.set($event)"
+              optionLabel="name"
+              optionValue="teamId"
+              placeholder="Pick a team"
+              styleClass="w-full"
+            />
+          </div>
+        </div>
+        <p class="m-0 -mt-2 text-xs text-surface-500">{{ demoDescription() }}</p>
+
+        @if (demoError()) {
+          <p-message severity="error" [text]="demoError()!" />
+        }
+        <p-button
+          label="Start the demo"
+          icon="pi pi-arrow-right"
+          iconPos="right"
+          type="button"
+          size="large"
+          styleClass="w-full"
+          [loading]="startingDemo()"
+          [disabled]="!demoTeamId()"
+          (onClick)="startDemo()"
+        />
+      </div>
+    </section>
+
+    <div class="demo-divider text-xs text-surface-500" aria-hidden="true">or use your own league</div>
+  }
   <p-panel header="Import your ESPN fantasy team">
     <form [formGroup]="form" class="flex flex-col gap-4">
       <div class="flex gap-4">

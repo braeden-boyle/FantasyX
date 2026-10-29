@@ -1,5 +1,7 @@
-import { Component, OnInit, inject, signal } from '@angular/core';
-import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+import { Component, OnInit, computed, inject, linkedSignal, signal } from '@angular/core';
+import { toObservable, toSignal } from '@angular/core/rxjs-interop';
+import { FormBuilder, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
+import { forkJoin, of, switchMap } from 'rxjs';
 import { Router } from '@angular/router';
 import { ButtonModule } from 'primeng/button';
 import { InputTextModule } from 'primeng/inputtext';
@@ -9,6 +11,10 @@ import { PanelModule } from 'primeng/panel';
 import { ToggleSwitchModule } from 'primeng/toggleswitch';
 import { CheckboxModule } from 'primeng/checkbox';
 import { MessageModule } from 'primeng/message';
+import { SelectButtonModule } from 'primeng/selectbutton';
+import { DemoScenario } from '../../models/demo.model';
+import { DemoModeService } from '../../services/demo-mode.service';
+import { DEMO_SCENARIO_INFO } from '../../utils/demo';
 import { EspnApiService } from '../../services/espn-api.service';
 import { TeamStateService } from '../../services/team-state.service';
 import { DeviceIdService } from '../../services/device-id.service';
@@ -19,7 +25,9 @@ import { ImportTeamRequest, TeamSummary } from '../../models/team.model';
   selector: 'app-import-team',
   standalone: true,
   imports: [
+    FormsModule,
     ReactiveFormsModule,
+    SelectButtonModule,
     ButtonModule,
     InputTextModule,
     InputNumberModule,
@@ -55,6 +63,42 @@ export class ImportTeamComponent implements OnInit {
   protected readonly importing = signal(false);
   protected readonly errorMessage = signal<string | null>(null);
   protected readonly hasSavedDetails = signal(false);
+
+  // The Try the demo card: shown once there's a scenario to show, starting on the one the visitor
+  // is already in, if any, as the team they already are.
+  private readonly demo = inject(DemoModeService);
+  private readonly demoScenarios = toSignal(this.demo.available(), { initialValue: [] as DemoScenario[] });
+  protected readonly demoScenarioOptions = computed(() =>
+    (['midweek', 'gameday'] as const).map((value) => ({
+      value,
+      label: DEMO_SCENARIO_INFO[value].label,
+      disabled: !this.demoScenarios().includes(value),
+    })),
+  );
+  protected readonly demoScenario = linkedSignal<DemoScenario | null>(() => this.demo.scenario() ?? this.demoScenarios()[0] ?? null);
+  protected readonly demoDescription = computed(() => {
+    const scenario = this.demoScenario();
+    return scenario ? DEMO_SCENARIO_INFO[scenario].description : null;
+  });
+  private readonly demoLeague = toSignal(
+    toObservable(this.demoScenario).pipe(
+      switchMap((scenario) =>
+        scenario ? forkJoin({ teams: this.demo.teams(scenario), manifest: this.demo.manifest(scenario) }) : of(null),
+      ),
+    ),
+    { initialValue: null },
+  );
+  protected readonly demoTeams = computed(() => this.demoLeague()?.teams ?? []);
+  protected readonly demoTeamId = linkedSignal(() => this.demo.teamId() ?? this.demoLeague()?.manifest.defaultTeamId ?? null);
+  // What the demo shows, with the icons of the tabs they're on.
+  protected readonly demoFeatures = [
+    { icon: 'pi pi-bolt', label: 'Live scores & win odds' },
+    { icon: 'pi pi-lightbulb', label: 'Start/sit, waivers & trades' },
+    { icon: 'pi pi-trophy', label: 'Power rankings & playoff odds' },
+    { icon: 'pi pi-users', label: 'Player rankings' },
+  ];
+  protected readonly startingDemo = signal(false);
+  protected readonly demoError = signal<string | null>(null);
 
   ngOnInit(): void {
     this.credentialsApi.get(this.deviceId.getDeviceId()).subscribe({
@@ -150,6 +194,23 @@ export class ImportTeamComponent implements OnInit {
           this.errorMessage.set(err?.error?.title ?? 'Could not import that team.');
         },
       });
+  }
+
+  protected startDemo(): void {
+    const scenario = this.demoScenario();
+    if (!scenario) return;
+    this.demoError.set(null);
+    this.startingDemo.set(true);
+    this.demo.start(scenario, this.demoTeamId() ?? undefined).subscribe({
+      next: () => {
+        this.startingDemo.set(false);
+        this.router.navigateByUrl('/team');
+      },
+      error: () => {
+        this.startingDemo.set(false);
+        this.demoError.set('Could not load the demo league.');
+      },
+    });
   }
 
   protected forgetSavedDetails(): void {
