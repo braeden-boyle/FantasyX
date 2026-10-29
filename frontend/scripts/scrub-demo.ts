@@ -4,7 +4,8 @@
 //
 //   npm run scrub:demo
 //
-// Environment: DEMO_TEAM_ID, the team a visitor starts as (default: the lowest team id), and
+// Environment: DEMO_TEAM_ID, the team a visitor starts as (default: the one the fixtures already
+// start as, else the lowest team id), and
 // ESPN_S2 and SWID, which are optional: when given, the leak check also looks for them by value.
 //
 // It scrubs every scenario captured, and writes nothing at all if any trace of the real league is
@@ -30,6 +31,18 @@ function jsonFiles(dir: string): string[] {
     const path = join(dir, entry.name);
     return entry.isDirectory() ? jsonFiles(path) : entry.name.endsWith('.json') ? [path] : [];
   });
+}
+
+// The team the committed fixtures already start a visitor as, if it's still in the league, so a
+// later scrub (game day, after mid-week) keeps it without DEMO_TEAM_ID being set again.
+function currentDefaultTeamId(teamIds: readonly number[]): number | null {
+  for (const scenario of DEMO_SCENARIOS) {
+    const path = join(OUT_DIR, scenario, 'manifest.json');
+    if (!existsSync(path)) continue;
+    const { defaultTeamId } = readJson<DemoManifest>(path);
+    if (teamIds.includes(defaultTeamId)) return defaultTeamId;
+  }
+  return null;
 }
 
 function kb(bytes: number): string {
@@ -59,7 +72,9 @@ function scrub(): void {
 
   const identity = buildIdentity(raw);
   const teamIds = [...identity.teams.keys()];
-  const defaultTeamId = process.env['DEMO_TEAM_ID'] ? Number(process.env['DEMO_TEAM_ID']) : Math.min(...teamIds);
+  const defaultTeamId = process.env['DEMO_TEAM_ID']
+    ? Number(process.env['DEMO_TEAM_ID'])
+    : (currentDefaultTeamId(teamIds) ?? Math.min(...teamIds));
   if (!teamIds.includes(defaultTeamId)) {
     throw new Error(`DEMO_TEAM_ID ${defaultTeamId} isn't a team in the league (${teamIds.join(', ')}).`);
   }

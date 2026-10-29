@@ -16,7 +16,7 @@ export interface LastImport {
 }
 
 // Enough to pick the demo up where it was after a page refresh: the scenario, the team, and when
-// it was started (real time), so the clock and the game-day replay carry on rather than restart.
+// it was started (real time), so the game-day replay carries on rather than restarts.
 // Kept apart from the last import, so the user's own team is still there after leaving the demo.
 export interface LastDemo {
   scenario: DemoScenario;

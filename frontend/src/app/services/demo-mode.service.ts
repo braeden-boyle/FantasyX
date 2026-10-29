@@ -25,8 +25,8 @@ interface ScenarioFixtures {
 
 interface DemoState extends ScenarioFixtures {
   scenario: DemoScenario;
-  // When the scenario was started, in real time: mid-week's clock runs on from its capture time by
-  // the time since, and game day's replay steps on from it.
+  // When the scenario was started, in real time, which game day's replay steps on from. Mid-week's
+  // clock doesn't use it.
   startedAt: number;
 }
 
@@ -50,14 +50,14 @@ export class DemoModeService {
   // The demo team the visitor is, while the demo is on.
   readonly teamId = computed(() => (this.active() ? this.teamState.importRequest()!.teamId : null));
 
-  // The demo clock: mid-week runs on from the capture at real speed, and game day shows the current
-  // step's time. Null outside the demo.
+  // The demo clock: mid-week stays at the moment of its capture, and game day shows the current
+  // step's time. Mid-week doesn't run on, since its data never moves: a visitor back hours or days
+  // later would otherwise find the week's games kicked off with no scores, and every player locked.
+  // Null outside the demo.
   now(): Date | null {
     const state = this.activeState();
     if (!state) return null;
-    if (state.scenario === 'midweek') {
-      return new Date(Date.parse(state.manifest.capturedAt) + Date.now() - state.startedAt);
-    }
+    if (state.scenario === 'midweek') return new Date(state.manifest.capturedAt);
     const times = stepTimes(state.manifest, state.frames);
     return new Date(times[replayStep(times.length, state.startedAt, Date.now())]);
   }

@@ -1722,6 +1722,28 @@ The app's demo plumbing, reachable for now only through a `?demo` link. The land
   - **With the game-day manifest hidden,** Game day was disabled on the card.
 - **Not checked:** importing a real team from inside the demo, which needs the backend and ESPN. The rest of the pages wait for real fixtures, as before.
 
+## The real mid-week capture (2026-10-29)
+
+Week 8 of the user's league, captured on Thursday at 5:22 PM ET, before that night's game. It has 14 teams and 496 files: 3.3 MB raw, 615 kB gzipped.
+
+- **The scrub:** every team, abbreviation and manager is a demo one. 13 logos were dropped and one ESPN default logo was kept. A scan of every string found:
+  - links only to `a.espncdn.com` and `g.espncdn.com`
+  - no email addresses
+  - no GUIDs (ESPN member ids)
+  - no fields beyond the app's models
+- **Every page works on the real data,** at desktop width and 375px (no page wider than the screen):
+  - My Team, Matchup, League and Rankings
+  - the player drawer (chart, game log, schedule)
+  - Start/Sit, Waivers (7 pickups) and Trades (a full analysis with playoff odds before and after)
+  - an NFL game page, and the settings backtest (1,197 player-weeks)
+- **Found and fixed:**
+  - **The fallback team logo overflowed with four-letter abbreviations,** which ESPN allows. It showed "GNOMGNOM" in the matchup switcher and a huge "GNOM" over the team name. Most demo teams have no logo once uploaded ones are dropped, but any real league can hit it too. `TeamLogoComponent` now shrinks the label to fit the circle (×0.68 for three characters, ×0.5 for four, from each avatar size's own font) and clips anything longer. The widest, "GNOM", is now 25 of 32px.
+  - **The mid-week clock ran on in real time from the capture.** That started at 5:22 PM ET on a Thursday with an 8:15 PM kickoff. A visitor back more than about three hours after starting (their start is saved) would have found Thursday's game started with no score. A few days later every game would be past with 0 points, and start/sit would treat everyone as locked. Mid-week's clock now stays at the capture time. Game day still steps through its replay.
+  - **The default team was dull:** Gridiron Gnomes' lineup was already optimal. Start/Sit was tried as each of the 14 teams, and 5 had nothing to suggest. The default is now team 15, Audible Alchemists. It has the biggest suggestion (1 change, +5.0), shown as a hint on My Team, and the one ESPN preset logo.
+  - `scrub:demo` now keeps the committed fixtures' default team when `DEMO_TEAM_ID` isn't set, so Sunday's scrub won't reset it to the lowest id.
+- **Left as is:** two 404s in the console on each load, from checking for game day's files. They go away once game day is captured.
+- `ng build` and Vitest's 234 tests pass, and the scripts type-check. The initial bundle is 186.8 kB over the warning. That's about 3 kB more than before, from the card restyle and the logo fix, and about 19 kB over `main` in all.
+
 ## Open questions
 
 - Which league and week to capture. The user's own league is the only one with cookies to hand, which is why the scrub matters.
